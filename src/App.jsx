@@ -887,7 +887,7 @@ function App() {
       outcomeCounts['Follow Up']++;
     } else if (status === 'Prospect') {
       outcomeCounts['Prospect']++;
-    } else if (status === 'Busy' || status === 'No Answer' || status === 'Not Answering' || status === 'Not Interested') {
+    } else if (status === 'Busy' || status === 'No Answer' || status === 'Not Answering' || status === 'Not Interested' || Number(log.duration) === 0) {
       outcomeCounts['Missed/Busy']++;
     } else if (status === 'Called') {
       outcomeCounts['Called']++;
