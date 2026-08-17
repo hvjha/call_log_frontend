@@ -1,6 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import './App.css';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+} from 'chart.js';
+import { Line, Bar, Doughnut } from 'react-chartjs-2';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+);
 
 const SOCKET_URL = 'https://call-log-qaq7.onrender.com';
 const API_BASE = 'https://call-log-qaq7.onrender.com';
@@ -47,6 +74,7 @@ function App() {
 
   // New Management Dashboard & Admin states
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'management'
+  const [showCharts, setShowCharts] = useState(false);
   const [allUsers, setAllUsers] = useState([]);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [showUserModal, setShowUserModal] = useState(false);
@@ -781,6 +809,114 @@ function App() {
   const followUpList = logs.filter(l => l.status && l.status.toLowerCase() === 'follow up').slice(0, 20);
   const prospectList = logs.filter(l => l.status && l.status.toLowerCase() === 'prospect').slice(0, 20);
 
+  // Group outcomes for Doughnut Chart
+  const outcomeCounts = {
+    'Interested': 0,
+    'Follow Up': 0,
+    'Prospect': 0,
+    'Missed/Busy': 0,
+    'Enquiry Received': 0,
+    'Called': 0,
+    'Other': 0
+  };
+
+  filteredLogs.forEach(log => {
+    const status = log.status || 'Pending';
+    const enquiry = log.enquiryReceived;
+    if (status === 'Interested' && enquiry === 'Yes') {
+      outcomeCounts['Enquiry Received']++;
+    } else if (status === 'Interested') {
+      outcomeCounts['Interested']++;
+    } else if (status === 'Follow Up') {
+      outcomeCounts['Follow Up']++;
+    } else if (status === 'Prospect') {
+      outcomeCounts['Prospect']++;
+    } else if (status === 'Busy' || status === 'No Answer' || status === 'Not Interested') {
+      outcomeCounts['Missed/Busy']++;
+    } else if (status === 'Called') {
+      outcomeCounts['Called']++;
+    } else {
+      outcomeCounts['Other']++;
+    }
+  });
+
+  const doughnutLabels = Object.keys(outcomeCounts).filter(k => outcomeCounts[k] > 0 || k === 'Interested' || k === 'Follow Up');
+  const doughnutData = {
+    labels: doughnutLabels,
+    datasets: [{
+      data: doughnutLabels.map(k => outcomeCounts[k]),
+      backgroundColor: [
+        '#10B981', // Interested
+        '#F59E0B', // Follow Up
+        '#8B5CF6', // Prospect
+        '#EF4444', // Missed/Busy
+        '#3B82F6', // Enquiry Received
+        '#6B7280', // Called
+        '#EC4899'  // Other
+      ],
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.1)'
+    }]
+  };
+
+  // Group Hourly dial times for Line Chart
+  const hourlyBins = {};
+  for (let i = 9; i <= 18; i++) {
+    const label = `${i > 12 ? i - 12 : i}:00 ${i >= 12 ? 'PM' : 'AM'}`;
+    hourlyBins[label] = 0;
+  }
+  
+  filteredLogs.forEach(log => {
+    const date = new Date(log.date);
+    const hour = date.getHours();
+    if (hour >= 9 && hour <= 18) {
+      const label = `${hour > 12 ? hour - 12 : hour}:00 ${hour >= 12 ? 'PM' : 'AM'}`;
+      hourlyBins[label]++;
+    }
+  });
+
+  const hourlyData = {
+    labels: Object.keys(hourlyBins),
+    datasets: [{
+      label: 'Hourly Calls',
+      data: Object.values(hourlyBins),
+      borderColor: '#3B82F6',
+      backgroundColor: 'rgba(59, 130, 246, 0.15)',
+      fill: true,
+      tension: 0.3,
+      pointRadius: 4,
+      pointBackgroundColor: '#3B82F6'
+    }]
+  };
+
+  // Group daily call count (Last 7 Days) for Bar Chart
+  const dailyBins = {};
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateString = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    dailyBins[dateString] = 0;
+  }
+
+  filteredLogs.forEach(log => {
+    const dateString = new Date(log.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    if (dailyBins[dateString] !== undefined) {
+      dailyBins[dateString]++;
+    }
+  });
+
+  const dailyData = {
+    labels: Object.keys(dailyBins),
+    datasets: [{
+      label: 'Daily Count',
+      data: Object.values(dailyBins),
+      backgroundColor: 'rgba(139, 92, 246, 0.65)',
+      borderColor: '#8B5CF6',
+      borderWidth: 1,
+      borderRadius: 4
+    }]
+  };
+
   if (!user) {
     return (
       <div className="auth-wrapper">
@@ -931,6 +1067,20 @@ function App() {
             />
           </div>
 
+          {user.role !== 'Executive' && (
+            <button 
+              onClick={() => setShowCharts(!showCharts)} 
+              className="btn-clear" 
+              style={{ 
+                background: showCharts ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.15)', 
+                borderColor: showCharts ? '#10B981' : 'var(--info)', 
+                color: showCharts ? '#10B981' : 'var(--info)', 
+                marginRight: '8px' 
+              }}
+            >
+              {showCharts ? '📊 Hide Analytics' : '📊 Show Analytics'}
+            </button>
+          )}
           <button onClick={exportToCsv} className="btn-clear" style={{ background: 'rgba(59, 130, 246, 0.15)', borderColor: 'var(--info)', color: 'var(--info)', marginRight: '8px' }}>
             📥 Export CSV
           </button>
@@ -1002,6 +1152,77 @@ function App() {
                 </div>
               </div>
             </div>
+
+            {/* GRAPHICAL ANALYTICS CHARTS SECTION */}
+            {showCharts && user.role !== 'Executive' && (
+              <div className="stat-card" style={{ padding: '20px', width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '20px', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  📈 Visual Performance Trends & Hourly Analytics
+                </h3>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+                  
+                  {/* Chart 1: Call Outcomes Comparison */}
+                  <div style={{ background: 'var(--bg-primary)', padding: '20px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: '380px' }}>
+                    <h4 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '15px', color: 'var(--text-secondary)' }}>📊 Overall Status Distribution</h4>
+                    <div style={{ width: '100%', height: '280px', display: 'flex', justifyContent: 'center' }}>
+                      <Doughnut 
+                        data={doughnutData} 
+                        options={{
+                          responsive: true,
+                          maintainAspectRatio: false,
+                          plugins: {
+                            legend: {
+                              position: 'bottom',
+                              labels: { color: 'rgba(255,255,255,0.7)', font: { size: 11 } }
+                            }
+                          }
+                        }} 
+                      />
+                    </div>
+                  </div>
+
+                  {/* Chart 2: Hourly Activity Trend */}
+                  <div style={{ background: 'var(--bg-primary)', padding: '20px', borderRadius: '8px', border: '1px solid var(--border-color)', minHeight: '380px' }}>
+                    <h4 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '15px', color: 'var(--text-secondary)' }}>🕒 Hourly Dialing Performance (9 AM - 6 PM)</h4>
+                    <div style={{ height: '280px' }}>
+                      <Line 
+                        data={hourlyData} 
+                        options={{
+                          responsive: true,
+                          maintainAspectRatio: false,
+                          plugins: { legend: { display: false } },
+                          scales: {
+                            y: { grid: { color: 'rgba(255,255,255,0.08)' }, ticks: { color: 'rgba(255,255,255,0.6)' } },
+                            x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.6)', font: { size: 10 } } }
+                          }
+                        }} 
+                      />
+                    </div>
+                  </div>
+
+                  {/* Chart 3: Weekly Activity Trend */}
+                  <div style={{ background: 'var(--bg-primary)', padding: '20px', borderRadius: '8px', border: '1px solid var(--border-color)', minHeight: '380px' }}>
+                    <h4 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '15px', color: 'var(--text-secondary)' }}>📅 Daily Call Volume (Last 7 Days)</h4>
+                    <div style={{ height: '280px' }}>
+                      <Bar 
+                        data={dailyData} 
+                        options={{
+                          responsive: true,
+                          maintainAspectRatio: false,
+                          plugins: { legend: { display: false } },
+                          scales: {
+                            y: { grid: { color: 'rgba(255,255,255,0.08)' }, ticks: { color: 'rgba(255,255,255,0.6)' } },
+                            x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.6)', font: { size: 10 } } }
+                          }
+                        }} 
+                      />
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            )}
 
             {/* BOTTOM ROW: 3-COLUMN GRID ALIGNED SIDE-BY-SIDE */}
             <div style={{ display: 'grid', gridTemplateColumns: '320px minmax(0, 1fr) 320px', gap: '20px', width: '100%' }}>
