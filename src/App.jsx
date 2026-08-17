@@ -22,6 +22,7 @@ function App() {
 
   // Executive-specific States
   const [leads, setLeads] = useState([]);
+  const [teamLeads, setTeamLeads] = useState([]);
   const [selectedLead, setSelectedLead] = useState(null);
   const [manualPhone, setManualPhone] = useState('');
   const [activeCall, setActiveCall] = useState(null); // { phoneNumber, name, status, duration }
@@ -195,15 +196,19 @@ function App() {
     fetchLeads();
     if (user.role !== 'Executive') {
       fetchAllUsers();
+      fetchTeamLeads();
     }
   }, [user]);
 
   // Fetch leads on tab changes
   useEffect(() => {
-    if (user) {
+    if (!user) return;
+    if (activeTab === 'dashboard') {
       fetchLeads();
+    } else if (activeTab === 'leads') {
+      fetchTeamLeads();
     }
-  }, [activeTab]);
+  }, [activeTab, user]);
 
   // Set team members based on hierarchy when allUsers updates
   useEffect(() => {
@@ -239,16 +244,25 @@ function App() {
 
   const fetchLeads = async () => {
     try {
-      const endpoint = user.role === 'Executive' 
-        ? `${API_BASE}/contacts/assigned/${user.empId}`
-        : `${API_BASE}/contacts/team/${user.empId}`;
-      const res = await fetch(endpoint);
+      const res = await fetch(`${API_BASE}/contacts/assigned/${user.empId}`);
       if (res.ok) {
         const data = await res.json();
         setLeads(data);
       }
     } catch (e) {
-      console.error('Error fetching leads:', e);
+      console.error('Error fetching assigned leads:', e);
+    }
+  };
+
+  const fetchTeamLeads = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/contacts/team/${user.empId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTeamLeads(data);
+      }
+    } catch (e) {
+      console.error('Error fetching team leads:', e);
     }
   };
 
@@ -600,6 +614,8 @@ function App() {
         alert(`Successfully assigned ${numbers.length} contacts!`);
         setShowAssignModal(false);
         setAssignForm({ numbersText: '', assignedTo: '' });
+        fetchLeads();
+        fetchTeamLeads();
       } else {
         alert(data.message || "Failed to assign contacts");
       }
@@ -655,6 +671,7 @@ function App() {
       if (res.ok && data.success) {
         alert("Lead removed successfully!");
         fetchLeads();
+        fetchTeamLeads();
       } else {
         alert(data.message || "Failed to remove lead");
       }
@@ -1588,7 +1605,7 @@ function App() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                 <h3 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>📞 Team Leads Directory</h3>
                 <span className="badge-perf badge-perf-excellent" style={{ padding: '6px 12px' }}>
-                  {leads.length} Leads Total
+                  {teamLeads.length} Leads Total
                 </span>
               </div>
 
@@ -1606,7 +1623,7 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {leads.map(lead => (
+                    {teamLeads.map(lead => (
                       <tr key={lead.number}>
                         <td><strong>{lead.number}</strong></td>
                         <td>{lead.name || 'Unnamed Lead'}</td>
@@ -1645,7 +1662,7 @@ function App() {
                         </td>
                       </tr>
                     ))}
-                    {leads.length === 0 && (
+                    {teamLeads.length === 0 && (
                       <tr>
                         <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-secondary)' }}>
                           No leads assigned. Sync from sheet or input manually.
@@ -1857,6 +1874,7 @@ function App() {
                       alert("Lead transferred successfully!");
                       setTransferringLead(null);
                       fetchLeads();
+                      fetchTeamLeads();
                     } else {
                       alert(data.message || "Failed to transfer");
                     }
