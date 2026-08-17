@@ -787,7 +787,7 @@ function App() {
       if (statusFilter === 'Enquiry') {
         matchesStatus = log.enquiryReceived && log.enquiryReceived.toLowerCase() === 'yes';
       } else if (statusFilter === 'Missed') {
-        matchesStatus = log.type === 3 || log.type === '3' || log.status === 'No Answer' || log.status === 'Not Answering' || log.status === 'Busy';
+        matchesStatus = log.type === 3 || log.type === '3' || log.status === 'No Answer' || log.status === 'Not Answering' || log.status === 'Busy' || Number(log.duration) === 0;
       } else {
         matchesStatus = log.status && log.status.toLowerCase() === statusFilter.toLowerCase();
       }
