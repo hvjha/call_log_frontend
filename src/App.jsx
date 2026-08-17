@@ -192,12 +192,18 @@ function App() {
   useEffect(() => {
     if (!user) return;
     fetchCategories();
-    if (user.role === 'Executive') {
-      fetchLeads();
-    } else {
+    fetchLeads();
+    if (user.role !== 'Executive') {
       fetchAllUsers();
     }
   }, [user]);
+
+  // Fetch leads on tab changes
+  useEffect(() => {
+    if (user) {
+      fetchLeads();
+    }
+  }, [activeTab]);
 
   // Set team members based on hierarchy when allUsers updates
   useEffect(() => {
