@@ -1576,8 +1576,8 @@ function App() {
                       style={{ width: '100%', padding: '10px' }}
                       required
                     >
-                      <option value="">Select subordinate...</option>
-                      {teamMembers.map(m => (
+                      <option value="">Select recipient...</option>
+                      {allUsers.map(m => (
                         <option key={m.empId} value={m.empId}>{m.name} ({m.role})</option>
                       ))}
                     </select>
@@ -1849,7 +1849,7 @@ function App() {
                 required
               >
                 <option value="">Select recipient...</option>
-                {teamMembers.map(m => (
+                {allUsers.map(m => (
                   <option key={m.empId} value={m.empId}>{m.name} ({m.role})</option>
                 ))}
               </select>
