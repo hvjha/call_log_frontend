@@ -29,6 +29,7 @@ function App() {
   const [callOutcome, setCallOutcome] = useState('Interested');
   const [enquiryReceived, setEnquiryReceived] = useState('No');
   const [callTimer, setCallTimer] = useState(0);
+  const [callStartTime, setCallStartTime] = useState(null); // For robust duration tracking
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [contactName, setContactName] = useState('');
   const [companyName, setCompanyName] = useState('');
@@ -43,13 +44,44 @@ function App() {
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [syncStatus, setSyncStatus] = useState('');
 
+  // New Management Dashboard & Admin states
+  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'management'
+  const [allUsers, setAllUsers] = useState([]);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [userForm, setUserForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    empId: '',
+    password: '',
+    role: 'Executive',
+    reportsTo: '',
+    category: ''
+  });
+  
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignForm, setAssignForm] = useState({
+    numbersText: '',
+    assignedTo: ''
+  });
+  const [transferringLead, setTransferringLead] = useState(null);
+  const [transferToEmpId, setTransferToEmpId] = useState('');
+
   const timerRef = useRef(null);
 
   // Read saved user session from localStorage on startup
   useEffect(() => {
     const savedUser = localStorage.getItem('crm_user');
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      const parsed = JSON.parse(savedUser);
+      setUser(parsed);
+      if (parsed.role === 'Admin') {
+        setSelectedMember('');
+      } else {
+        setSelectedMember('All');
+      }
     }
   }, []);
 
@@ -79,6 +111,7 @@ function App() {
       });
 
       if (data.status === 'Active') {
+        setCallStartTime(Date.now());
         startTimer();
       } else if (data.status === 'Completed' || data.status === 'Disconnected') {
         stopTimer();
@@ -127,6 +160,34 @@ function App() {
     };
   }, [user]);
 
+  const getDescendants = (empId, users) => {
+    let result = [];
+    let queue = [String(empId)];
+    while (queue.length > 0) {
+      const currentId = queue.shift();
+      const children = users.filter(u => String(u.reportsTo) === currentId);
+      for (const child of children) {
+        if (!result.some(r => r.empId === child.empId)) {
+          result.push(child);
+          queue.push(String(child.empId));
+        }
+      }
+    }
+    return result;
+  };
+
+  const fetchAllUsers = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/getAllUsers`);
+      if (res.ok) {
+        const data = await res.json();
+        setAllUsers(data);
+      }
+    } catch (e) {
+      console.error('Error fetching all users:', e);
+    }
+  };
+
   // Load configuration and data
   useEffect(() => {
     if (!user) return;
@@ -134,9 +195,20 @@ function App() {
     if (user.role === 'Executive') {
       fetchLeads();
     } else {
-      fetchTeamOverview();
+      fetchAllUsers();
     }
   }, [user]);
+
+  // Set team members based on hierarchy when allUsers updates
+  useEffect(() => {
+    if (!user || allUsers.length === 0) return;
+    if (user.role === 'Executive') return;
+    if (user.role === 'Admin') {
+      setTeamMembers(allUsers);
+    } else {
+      setTeamMembers(getDescendants(user.empId, allUsers));
+    }
+  }, [allUsers, user]);
 
   // Refetch logs when filters change
   useEffect(() => {
@@ -161,25 +233,16 @@ function App() {
 
   const fetchLeads = async () => {
     try {
-      const res = await fetch(`${API_BASE}/contacts/assigned/${user.empId}`);
+      const endpoint = user.role === 'Executive' 
+        ? `${API_BASE}/contacts/assigned/${user.empId}`
+        : `${API_BASE}/contacts/team/${user.empId}`;
+      const res = await fetch(endpoint);
       if (res.ok) {
         const data = await res.json();
         setLeads(data);
       }
     } catch (e) {
       console.error('Error fetching leads:', e);
-    }
-  };
-
-  const fetchTeamOverview = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/getMembers/${user.empId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setTeamMembers(data);
-      }
-    } catch (e) {
-      console.error('Error fetching team:', e);
     }
   };
 
@@ -232,13 +295,27 @@ function App() {
 
   const fetchLogs = async () => {
     if (!user) return;
+    if (user.role === 'Admin' && !selectedMember) {
+      setLogs([]);
+      return;
+    }
     try {
       const { startDate, endDate } = getDateRangeParams();
       const targetEmpIds = user.role === 'Executive' 
         ? [user.empId] 
         : (selectedMember === 'All' ? [user.empId] : [selectedMember]);
       
-      const includeSubs = user.role !== 'Executive' && selectedMember === 'All';
+      let includeSubs = false;
+      if (user.role !== 'Executive') {
+        if (selectedMember === 'All') {
+          includeSubs = true;
+        } else {
+          const selectedUser = allUsers.find(u => String(u.empId) === String(selectedMember));
+          if (selectedUser && (selectedUser.role === 'Manager' || selectedUser.role === 'TL' || selectedUser.role === 'Admin' || selectedUser.role === 'Team Leader')) {
+            includeSubs = true;
+          }
+        }
+      }
 
       const res = await fetch(`${API_BASE}/getFilteredLogs`, {
         method: 'POST',
@@ -273,6 +350,11 @@ function App() {
           category: data.category
         };
         setUser(loggedUser);
+        if (loggedUser.role === 'Admin') {
+          setSelectedMember('');
+        } else {
+          setSelectedMember('All');
+        }
         localStorage.setItem('crm_user', JSON.stringify(loggedUser));
       } else {
         setError(data.message || 'Login failed');
@@ -315,6 +397,7 @@ function App() {
       status: 'Triggered',
       duration: 0
     });
+    setCallStartTime(null); // Reset start time until active
     setCallNotes('');
     setEnquiryReceived('No');
     setCallOutcome('Interested');
@@ -331,7 +414,15 @@ function App() {
     setIsSubmitting(true);
 
     const isUnconnected = callOutcome === 'Busy' || callOutcome === 'No Answer' || activeCall.status === 'Triggered' || activeCall.status === 'Dialing' || activeCall.status === 'Ringing';
-    const finalDuration = isUnconnected ? 0 : callTimer;
+    
+    let finalDuration = 0;
+    if (!isUnconnected) {
+      if (callStartTime) {
+        finalDuration = Math.floor((Date.now() - callStartTime) / 1000);
+      } else {
+        finalDuration = callTimer;
+      }
+    }
 
     const callRecord = {
       id: Date.now().toString(),
@@ -401,6 +492,169 @@ function App() {
       setSyncStatus('Sync error');
     }
     setTimeout(() => setSyncStatus(''), 4000);
+  };
+  const handleAddCategory = async (e) => {
+    e.preventDefault();
+    if (!newCategoryName.trim()) return;
+    try {
+      const res = await fetch(`${API_BASE}/categories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newCategoryName })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert("Category created successfully!");
+        setNewCategoryName('');
+        fetchCategories();
+      } else {
+        alert(data.message || "Failed to create category");
+      }
+    } catch (err) {
+      alert("Error creating category");
+    }
+  };
+
+  const handleSaveUser = async (e) => {
+    e.preventDefault();
+    const endpoint = editingUser ? `${API_BASE}/updateUser` : `${API_BASE}/createUser`;
+    const payload = {
+      ...userForm,
+      reportsTo: editingUser ? userForm.reportsTo : (
+        user.role === 'Manager' && userForm.role === 'TL' ? user.empId : 
+        user.role === 'TL' ? user.empId : userForm.reportsTo || user.empId
+      )
+    };
+
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert(editingUser ? "User updated successfully!" : "User created successfully!");
+        setShowUserModal(false);
+        setEditingUser(null);
+        setUserForm({ name: '', email: '', phone: '', empId: '', password: '', role: 'Executive', reportsTo: '', category: '' });
+        fetchAllUsers();
+      } else {
+        alert(data.message || "Operation failed");
+      }
+    } catch (err) {
+      alert("Connection error");
+    }
+  };
+
+  const handleDeleteUser = async (empId) => {
+    if (!window.confirm(`Are you sure you want to delete user ${empId}?`)) return;
+    try {
+      const res = await fetch(`${API_BASE}/deleteUser`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empId })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert("User deleted successfully!");
+        fetchAllUsers();
+      } else {
+        alert(data.message || "Delete failed");
+      }
+    } catch (err) {
+      alert("Error deleting user");
+    }
+  };
+
+  const handleAssignLeads = async (e) => {
+    e.preventDefault();
+    const numbers = assignForm.numbersText.split(/[\n,]+/).map(n => n.trim()).filter(Boolean);
+    if (numbers.length === 0) {
+      alert("Please enter at least one number.");
+      return;
+    }
+    if (!assignForm.assignedTo) {
+      alert("Please select a team member.");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/contacts/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          numbers,
+          assignedTo: assignForm.assignedTo,
+          assignedBy: user.empId
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert(`Successfully assigned ${numbers.length} contacts!`);
+        setShowAssignModal(false);
+        setAssignForm({ numbersText: '', assignedTo: '' });
+      } else {
+        alert(data.message || "Failed to assign contacts");
+      }
+    } catch (err) {
+      alert("Error assigning contacts");
+    }
+  };
+
+  const exportToCsv = () => {
+    if (filteredLogs.length === 0) {
+      alert("No logs to export");
+      return;
+    }
+    const headers = ["ID", "Time", "Executive", "Lead Name", "Phone", "Company", "Address", "Email", "Format", "Duration (sec)", "Outcome", "Enquiry Received", "Notes"];
+    const rows = filteredLogs.map(log => [
+      log.id,
+      new Date(log.date).toLocaleString(),
+      log.syncedBy || '',
+      log.contactName || log.name || '',
+      log.number,
+      log.companyName || '',
+      log.address || '',
+      log.email || '',
+      log.format || '',
+      log.duration || 0,
+      log.status || '',
+      log.enquiryReceived || 'No',
+      (log.description || '').replace(/"/g, '""').replace(/\r?\n/g, ' ')
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+      + [headers.join(","), ...rows.map(e => e.map(val => `"${val}"`).join(","))].join("\n");
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `JJ_CRM_Report_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleRemoveLead = async (e, number) => {
+    e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to remove lead ${number}?`)) return;
+    try {
+      const res = await fetch(`${API_BASE}/contacts/remove`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number, empId: user.empId })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert("Lead removed successfully!");
+        fetchLeads();
+      } else {
+        alert(data.message || "Failed to remove lead");
+      }
+    } catch (err) {
+      alert("Error removing lead");
+    }
   };
 
   const formatDuration = (sec) => {
@@ -552,13 +806,40 @@ function App() {
           <span>⚡</span> JJ CRM
         </div>
         <div className="user-profile">
+          {user.role !== 'Executive' && (
+            <div style={{ display: 'flex', gap: '10px', marginRight: '15px' }}>
+              <button 
+                onClick={() => setActiveTab('dashboard')} 
+                className="btn-logout"
+                style={activeTab === 'dashboard' ? { background: 'var(--accent-gradient)', borderColor: 'transparent', color: 'white' } : {}}
+              >
+                📊 Dashboard
+              </button>
+              <button 
+                onClick={() => setActiveTab('team')} 
+                className="btn-logout"
+                style={activeTab === 'team' ? { background: 'var(--accent-gradient)', borderColor: 'transparent', color: 'white' } : {}}
+              >
+                👥 Team
+              </button>
+              <button 
+                onClick={() => setActiveTab('leads')} 
+                className="btn-logout"
+                style={activeTab === 'leads' ? { background: 'var(--accent-gradient)', borderColor: 'transparent', color: 'white' } : {}}
+              >
+                📞 Leads
+              </button>
+            </div>
+          )}
           <div className="user-info">
             <div className="profile-name">{user.name}</div>
             <div className="profile-role">{user.role} Dashboard (ID: {user.empId})</div>
           </div>
-          <button onClick={syncGoogleSheet} className="btn-logout" style={{ background: 'rgba(16, 185, 129, 0.1)', borderColor: 'var(--success)', color: 'var(--success)' }}>
-            {syncStatus || 'Sync Leads'}
-          </button>
+          {(user.role === 'Manager' || user.role === 'TL') && (
+            <button onClick={syncGoogleSheet} className="btn-logout" style={{ background: 'rgba(16, 185, 129, 0.1)', borderColor: 'var(--success)', color: 'var(--success)' }}>
+              {syncStatus || 'Sync Leads'}
+            </button>
+          )}
           <button onClick={handleLogout} className="btn-logout">Logout</button>
         </div>
       </header>
@@ -597,10 +878,21 @@ function App() {
 
           {user.role !== 'Executive' && (
             <div className="filter-group">
-              <span className="filter-label">EXECUTIVE:</span>
+              <span className="filter-label">{user.role === 'Admin' ? 'MANAGER:' : 'EXECUTIVE:'}</span>
               <select value={selectedMember} onChange={(e) => setSelectedMember(e.target.value)} className="filter-select">
-                <option value="All">All Team</option>
-                {teamMembers.map(m => <option key={m.empId} value={m.empId}>{m.name}</option>)}
+                {user.role === 'Admin' ? (
+                  <>
+                    <option value="">Select a Manager...</option>
+                    {teamMembers.filter(m => m.role === 'Manager').map(m => (
+                      <option key={m.empId} value={m.empId}>{m.name} (Manager)</option>
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    <option value="All">All Team</option>
+                    {teamMembers.map(m => <option key={m.empId} value={m.empId}>{m.name} ({m.role})</option>)}
+                  </>
+                )}
               </select>
             </div>
           )}
@@ -616,6 +908,9 @@ function App() {
             />
           </div>
 
+          <button onClick={exportToCsv} className="btn-clear" style={{ background: 'rgba(59, 130, 246, 0.15)', borderColor: 'var(--info)', color: 'var(--info)', marginRight: '8px' }}>
+            📥 Export CSV
+          </button>
           <button onClick={clearFilters} className="btn-clear">
             Clear Filters
           </button>
@@ -625,300 +920,602 @@ function App() {
       {/* DASHBOARD CONTENT CONTAINER */}
       <div className="main-content" style={{ maxWidth: '100%', width: '100%', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         
-        {/* TOP ROW: DIALER SECTION + STATS ROW ALIGNED IN THE SAME LINE SPANNING FULL WIDTH */}
-        <div style={{ display: 'flex', gap: '20px', width: '100%', alignItems: 'stretch' }}>
-          {/* MANUAL DIALER CARD */}
-          <div className="stat-card" style={{ padding: '20px', width: '320px', display: 'flex', flexDirection: 'column', justifyContent: 'center', flexShrink: 0 }}>
-            <h4 style={{ fontSize: '14px', marginBottom: '12px', fontWeight: 'bold' }}>Make a Call</h4>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <input 
-                type="text" 
-                placeholder="Enter phone number..." 
-                value={manualPhone}
-                onChange={(e) => setManualPhone(e.target.value)}
-                style={{ flex: 1, background: 'var(--bg-primary)', color: 'white', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '4px', fontSize: '14px', outline: 'none' }}
-              />
-              <button onClick={() => { if (manualPhone) triggerCall(manualPhone, 'Manual Dial'); }} className="btn-call" style={{ padding: '8px 16px', fontSize: '13px' }}>
-                Call
-              </button>
-            </div>
-          </div>
-
-          {/* STATS CARDS ROW (6 CARDS FILLING THE REMAINING WIDTH) */}
-          <div className="stats-row" style={{ flex: 1 }}>
-            <div className={`stat-card stat-card-total ${statusFilter === 'All' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('All')}>
-              <div className="stat-val">{totalCalls}</div>
-              <div className="stat-label">Total Calls</div>
-            </div>
-            <div className={`stat-card stat-card-interested ${statusFilter === 'Interested' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('Interested')}>
-              <div className="stat-val">{interestedCalls}</div>
-              <div className="stat-label">
-                <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(interestedCalls)})</span> Interested
-              </div>
-            </div>
-            <div className={`stat-card stat-card-followup ${statusFilter === 'Follow Up' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('Follow Up')}>
-              <div className="stat-val">{followUpCalls}</div>
-              <div className="stat-label">
-                <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(followUpCalls)})</span> Follow Up
-              </div>
-            </div>
-            <div className={`stat-card stat-card-missed ${statusFilter === 'Missed' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('Missed')}>
-              <div className="stat-val">{missedCalls}</div>
-              <div className="stat-label">
-                <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(missedCalls)})</span> Missed / Busy
-              </div>
-            </div>
-            <div className={`stat-card stat-card-prospect ${statusFilter === 'Prospect' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('Prospect')}>
-              <div className="stat-val">{prospectCalls}</div>
-              <div className="stat-label">
-                <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(prospectCalls)})</span> Prospect
-              </div>
-            </div>
-            <div className={`stat-card stat-card-enquiry ${statusFilter === 'Enquiry' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('Enquiry')}>
-              <div className="stat-val">{enquiryCalls}</div>
-              <div className="stat-label">
-                <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(enquiryCalls)})</span> Enquiry Received
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* BOTTOM ROW: 3-COLUMN GRID ALIGNED SIDE-BY-SIDE */}
-        <div style={{ display: 'grid', gridTemplateColumns: '320px minmax(0, 1fr) 320px', gap: '20px', width: '100%' }}>
-          
-          {/* COLUMN 1: LEFT SIDE - ASSIGNED LEADS */}
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <div className="stat-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', height: '1150px' }}>
-              <h4 style={{ fontSize: '14px', marginBottom: '12px', fontWeight: 'bold' }}>Assigned Leads ({leads.length})</h4>
-              <div className="leads-list" style={{ flex: 1, overflowY: 'auto' }}>
-                {leads.map(lead => (
-                  <div 
-                    key={lead.number} 
-                    className={`lead-item ${selectedLead?.number === lead.number ? 'active' : ''}`}
-                    onClick={() => setSelectedLead(lead)}
-                  >
-                    <div className="lead-name">{lead.name || 'Unnamed Lead'}</div>
-                    <div className="lead-phone">📞 {lead.number}</div>
-                  </div>
-                ))}
-                {leads.length === 0 && <div className="empty-state" style={{ padding: '20px' }}>No pending leads.</div>}
-              </div>
-            </div>
-          </div>
-
-          {/* COLUMN 2: CENTER - ACTIVE CALL / HISTORY / HOURLY PERFORMANCE TABLE */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0 }}>
-            
-            {/* ACTIVE CALL HUD */}
-            {activeCall && (
-              <div className="call-hud">
-                <div className="hud-phone-icon">📞</div>
-                <div className="hud-name">{activeCall.name}</div>
-                <div className="hud-phone">{activeCall.phoneNumber}</div>
-                
-                <div className="hud-state">
-                  <div className="pulse-dot"></div>
-                  {activeCall.status}...
-                </div>
-
-                {/* SHOW LIVE TIMER & SOUNDWAVE WHILE CALLING */}
-                {activeCall.status !== 'Completed' && activeCall.status !== 'Disconnected' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '15px' }}>
-                    <div className="sound-wave" style={{ marginBottom: '15px' }}>
-                      <div className="sound-bar"></div>
-                      <div className="sound-bar"></div>
-                      <div className="sound-bar"></div>
-                      <div className="sound-bar"></div>
-                      <div className="sound-bar"></div>
-                    </div>
-                    <div style={{ fontSize: '32px', fontWeight: 'bold', fontFamily: 'var(--font-display)', marginBottom: '15px' }}>
-                      {formatDuration(callTimer)}
-                    </div>
-                    <button 
-                      onClick={() => { stopTimer(); setActiveCall(prev => ({ ...prev, status: 'Completed' })); }} 
-                      className="btn-call" 
-                      style={{ background: 'var(--danger)', padding: '10px 20px', fontSize: '13px', borderRadius: '20px' }}
-                    >
-                      🛑 End Call & Log Outcome
-                    </button>
-                  </div>
-                )}
-
-                {/* ONLY SHOW OUTCOME FORM AFTER CALL DISCONNECTS / ENDS */}
-                {(activeCall.status === 'Completed' || activeCall.status === 'Disconnected') && (
-                  <div className="outcome-box" style={{ marginTop: '20px' }}>
-                    <h4 className="outcome-title">Call Update & Outcome (Duration: {formatDuration(callTimer)})</h4>
-                    <div className="outcome-options" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                      {['Interested', 'Follow Up', 'Prospect', 'Not Interested', 'Busy', 'No Answer'].map(outcome => (
-                        <button 
-                          key={outcome} 
-                          className={`outcome-btn ${callOutcome === outcome ? 'active' : ''}`}
-                          onClick={() => setCallOutcome(outcome)}
-                        >
-                          {outcome}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* ADDITIONAL LEAD DETAILS INPUTS */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '15px', marginBottom: '15px' }}>
-                      <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label">Contact Name</label>
-                        <input 
-                          type="text" 
-                          className="form-input" 
-                          value={contactName} 
-                          onChange={(e) => setContactName(e.target.value)} 
-                          placeholder="Contact Name" 
-                        />
-                      </div>
-                      <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label">Company Name</label>
-                        <input 
-                          type="text" 
-                          className="form-input" 
-                          value={companyName} 
-                          onChange={(e) => setCompanyName(e.target.value)} 
-                          placeholder="Company Name" 
-                        />
-                      </div>
-                      <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label">Address</label>
-                        <input 
-                          type="text" 
-                          className="form-input" 
-                          value={address} 
-                          onChange={(e) => setAddress(e.target.value)} 
-                          placeholder="Address" 
-                        />
-                      </div>
-                      <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label">Email</label>
-                        <input 
-                          type="email" 
-                          className="form-input" 
-                          value={email} 
-                          onChange={(e) => setEmail(e.target.value)} 
-                          placeholder="Email" 
-                        />
-                      </div>
-                    </div>
-
-                    <div className="form-group" style={{ marginBottom: '15px' }}>
-                      <label className="form-label">Select Format</label>
-                      <select 
-                        className="form-input" 
-                        value={callFormat} 
-                        onChange={(e) => setCallFormat(e.target.value)}
-                        style={{ width: '100%', background: 'var(--bg-secondary)', color: 'white', border: '1px solid var(--border-color)', padding: '10px', borderRadius: '6px' }}
-                      >
-                        <option value="Select Format">Select Format</option>
-                        <option value="General Catalogue Sharing (Format 0005)">General Catalogue Sharing (Format 0005)</option>
-                        <option value="Collaboration Opportunity (Format 0003)">Collaboration Opportunity (Format 0003)</option>
-                        <option value="Revolutionize Your Printing (Format 0002)">Revolutionize Your Printing (Format 0002)</option>
-                        <option value="Elevate Your Brand (Format 0004)">Elevate Your Brand (Format 0004)</option>
-                      </select>
-                    </div>
-
-                    {/* ENQUIRY RECEIVED: SHOW ONLY WHEN STATUS IS INTERESTED */}
-                    {callOutcome === 'Interested' && (
-                      <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '20px 0' }}>
-                        <span className="form-label" style={{ margin: 0 }}>Enquiry Received:</span>
-                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                          <input type="radio" name="enquiry" value="Yes" checked={enquiryReceived === 'Yes'} onChange={() => setEnquiryReceived('Yes')} /> Yes
-                        </label>
-                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                          <input type="radio" name="enquiry" value="No" checked={enquiryReceived === 'No'} onChange={() => setEnquiryReceived('No')} /> No
-                        </label>
-                      </div>
-                    )}
-
-                    <div className="form-group">
-                      <textarea 
-                        className="form-input" 
-                        rows="2" 
-                        placeholder="Remarks / Note about the call..."
-                        value={callNotes}
-                        onChange={(e) => setCallNotes(e.target.value)}
-                      ></textarea>
-                    </div>
-                    <button 
-                      onClick={submitCallOutcome} 
-                      className="btn-primary" 
-                      style={{ background: isSubmitting ? '#4b5563' : 'var(--success)', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}
-                      disabled={isSubmitting}
-                    >
-                      {isSubmitting ? 'Syncing...' : 'Sync & Update Status'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* HANDSET CALL TRIGGER FOR SELECTED LEAD */}
-            {selectedLead && !activeCall && (
-              <div className="detail-card">
-                <div className="detail-header">
-                  <div className="detail-title">
-                    <h2>{selectedLead.name || 'Unnamed Lead'}</h2>
-                    <div className="detail-phone">{selectedLead.number}</div>
-                  </div>
-                  <span className="status-badge pending">Pending Call</span>
-                </div>
-                <div className="call-action-box">
-                  <button onClick={() => triggerCall(selectedLead.number, selectedLead.name)} className="btn-call">
-                    <span>📞</span> Call via Handset
+        {activeTab === 'dashboard' ? (
+          <>
+            {/* TOP ROW: DIALER SECTION + STATS ROW ALIGNED IN THE SAME LINE SPANNING FULL WIDTH */}
+            <div style={{ display: 'flex', gap: '20px', width: '100%', alignItems: 'stretch' }}>
+              {/* MANUAL DIALER CARD */}
+              <div className="stat-card" style={{ padding: '20px', width: '320px', display: 'flex', flexDirection: 'column', justifyContent: 'center', flexShrink: 0 }}>
+                <h4 style={{ fontSize: '14px', marginBottom: '12px', fontWeight: 'bold' }}>Make a Call</h4>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <input 
+                    type="text" 
+                    placeholder="Enter phone number..." 
+                    value={manualPhone}
+                    onChange={(e) => setManualPhone(e.target.value)}
+                    style={{ flex: 1, background: 'var(--bg-primary)', color: 'white', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '4px', fontSize: '14px', outline: 'none' }}
+                  />
+                  <button onClick={() => { if (manualPhone) triggerCall(manualPhone, 'Manual Dial'); }} className="btn-call" style={{ padding: '8px 16px', fontSize: '13px' }}>
+                    Call
                   </button>
                 </div>
               </div>
-            )}
 
-            {/* CALL HISTORY CONTAINER */}
-            <div className="history-box">
-              <h3 className="history-title">📊 Call History Logs ({filteredLogs.length})</h3>
-              <div className="table-wrapper" style={{ maxHeight: '450px' }}>
+              {/* STATS CARDS ROW (6 CARDS FILLING THE REMAINING WIDTH) */}
+              <div className="stats-row" style={{ flex: 1 }}>
+                <div className={`stat-card stat-card-total ${statusFilter === 'All' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('All')}>
+                  <div className="stat-val">{totalCalls}</div>
+                  <div className="stat-label">Total Calls</div>
+                </div>
+                <div className={`stat-card stat-card-interested ${statusFilter === 'Interested' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('Interested')}>
+                  <div className="stat-val">{interestedCalls}</div>
+                  <div className="stat-label">
+                    <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(interestedCalls)})</span> Interested
+                  </div>
+                </div>
+                <div className={`stat-card stat-card-followup ${statusFilter === 'Follow Up' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('Follow Up')}>
+                  <div className="stat-val">{followUpCalls}</div>
+                  <div className="stat-label">
+                    <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(followUpCalls)})</span> Follow Up
+                  </div>
+                </div>
+                <div className={`stat-card stat-card-missed ${statusFilter === 'Missed' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('Missed')}>
+                  <div className="stat-val">{missedCalls}</div>
+                  <div className="stat-label">
+                    <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(missedCalls)})</span> Missed / Busy
+                  </div>
+                </div>
+                <div className={`stat-card stat-card-prospect ${statusFilter === 'Prospect' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('Prospect')}>
+                  <div className="stat-val">{prospectCalls}</div>
+                  <div className="stat-label">
+                    <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(prospectCalls)})</span> Prospect
+                  </div>
+                </div>
+                <div className={`stat-card stat-card-enquiry ${statusFilter === 'Enquiry' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('Enquiry')}>
+                  <div className="stat-val">{enquiryCalls}</div>
+                  <div className="stat-label">
+                    <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(enquiryCalls)})</span> Enquiry Received
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* BOTTOM ROW: 3-COLUMN GRID ALIGNED SIDE-BY-SIDE */}
+            <div style={{ display: 'grid', gridTemplateColumns: '320px minmax(0, 1fr) 320px', gap: '20px', width: '100%' }}>
+              
+              {/* COLUMN 1: LEFT SIDE - ASSIGNED LEADS */}
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div className="stat-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', height: '1150px' }}>
+                  <h4 style={{ fontSize: '14px', marginBottom: '12px', fontWeight: 'bold' }}>Assigned Leads ({leads.length})</h4>
+                  <div className="leads-list" style={{ flex: 1, overflowY: 'auto' }}>
+                    {leads.map(lead => (
+                      <div 
+                        key={lead.number} 
+                        className={`lead-item ${selectedLead?.number === lead.number ? 'active' : ''}`}
+                        onClick={() => setSelectedLead(lead)}
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                      >
+                        <div>
+                          <div className="lead-name">{lead.name || 'Unnamed Lead'}</div>
+                          <div className="lead-phone">📞 {lead.number}</div>
+                        </div>
+                        {user.role !== 'Executive' && (
+                          <button 
+                            onClick={(e) => handleRemoveLead(e, lead.number)}
+                            className="btn-logout"
+                            style={{ padding: '4px 8px', fontSize: '11px', borderColor: 'var(--danger)', color: 'var(--danger)', background: 'transparent' }}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {leads.length === 0 && <div className="empty-state" style={{ padding: '20px' }}>No pending leads.</div>}
+                  </div>
+                </div>
+              </div>
+
+              {/* COLUMN 2: CENTER - ACTIVE CALL / HISTORY / HOURLY PERFORMANCE TABLE */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0 }}>
+                
+                {/* ACTIVE CALL HUD */}
+                {activeCall && (
+                  <div className="call-hud">
+                    <div className="hud-phone-icon">📞</div>
+                    <div className="hud-name">{activeCall.name}</div>
+                    <div className="hud-phone">{activeCall.phoneNumber}</div>
+                    
+                    <div className="hud-state">
+                      <div className="pulse-dot"></div>
+                      {activeCall.status}...
+                    </div>
+
+                    {/* SHOW LIVE TIMER & SOUNDWAVE WHILE CALLING */}
+                    {activeCall.status !== 'Completed' && activeCall.status !== 'Disconnected' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '15px' }}>
+                        <div className="sound-wave" style={{ marginBottom: '15px' }}>
+                          <div className="sound-bar"></div>
+                          <div className="sound-bar"></div>
+                          <div className="sound-bar"></div>
+                          <div className="sound-bar"></div>
+                          <div className="sound-bar"></div>
+                        </div>
+                        <div style={{ fontSize: '32px', fontWeight: 'bold', fontFamily: 'var(--font-display)', marginBottom: '15px' }}>
+                          {formatDuration(callTimer)}
+                        </div>
+                        <button 
+                          onClick={() => { stopTimer(); setActiveCall(prev => ({ ...prev, status: 'Completed' })); }} 
+                          className="btn-call" 
+                          style={{ background: 'var(--danger)', padding: '10px 20px', fontSize: '13px', borderRadius: '20px' }}
+                        >
+                          🛑 End Call & Log Outcome
+                        </button>
+                      </div>
+                    )}
+
+                    {/* ONLY SHOW OUTCOME FORM AFTER CALL DISCONNECTS / ENDS */}
+                    {(activeCall.status === 'Completed' || activeCall.status === 'Disconnected') && (
+                      <div className="outcome-box" style={{ marginTop: '20px' }}>
+                        <h4 className="outcome-title">Call Outcome (Duration: {formatDuration(callTimer)})</h4>
+                        <div className="outcome-options" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                          {['Interested', 'Follow Up', 'Prospect', 'Not Interested', 'Busy', 'No Answer'].map(outcome => (
+                            <button 
+                              key={outcome} 
+                              className={`outcome-btn ${callOutcome === outcome ? 'active' : ''}`}
+                              onClick={() => setCallOutcome(outcome)}
+                            >
+                              {outcome}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* ADDITIONAL LEAD DETAILS INPUTS */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '15px', marginBottom: '15px' }}>
+                          <div className="form-group" style={{ margin: 0 }}>
+                            <label className="form-label">Contact Name</label>
+                            <input 
+                              type="text" 
+                              className="form-input" 
+                              value={contactName} 
+                              onChange={(e) => setContactName(e.target.value)} 
+                              placeholder="Contact Name" 
+                            />
+                          </div>
+                          <div className="form-group" style={{ margin: 0 }}>
+                            <label className="form-label">Company Name</label>
+                            <input 
+                              type="text" 
+                              className="form-input" 
+                              value={companyName} 
+                              onChange={(e) => setCompanyName(e.target.value)} 
+                              placeholder="Company Name" 
+                            />
+                          </div>
+                          <div className="form-group" style={{ margin: 0 }}>
+                            <label className="form-label">Address</label>
+                            <input 
+                              type="text" 
+                              className="form-input" 
+                              value={address} 
+                              onChange={(e) => setAddress(e.target.value)} 
+                              placeholder="Address" 
+                            />
+                          </div>
+                          <div className="form-group" style={{ margin: 0 }}>
+                            <label className="form-label">Email</label>
+                            <input 
+                              type="email" 
+                              className="form-input" 
+                              value={email} 
+                              onChange={(e) => setEmail(e.target.value)}
+                              placeholder="Email" 
+                            />
+                          </div>
+                        </div>
+
+                        <div className="form-group" style={{ marginBottom: '15px' }}>
+                          <label className="form-label">Select Format</label>
+                          <select 
+                            className="form-input" 
+                            value={callFormat} 
+                            onChange={(e) => setCallFormat(e.target.value)}
+                            style={{ width: '100%', background: 'var(--bg-secondary)', color: 'white', border: '1px solid var(--border-color)', padding: '10px', borderRadius: '6px' }}
+                          >
+                            <option value="Select Format">Select Format</option>
+                            <option value="General Catalogue Sharing (Format 0005)">General Catalogue Sharing (Format 0005)</option>
+                            <option value="Collaboration Opportunity (Format 0003)">Collaboration Opportunity (Format 0003)</option>
+                            <option value="Revolutionize Your Printing (Format 0002)">Revolutionize Your Printing (Format 0002)</option>
+                            <option value="Elevate Your Brand (Format 0004)">Elevate Your Brand (Format 0004)</option>
+                          </select>
+                        </div>
+
+                        {/* ENQUIRY RECEIVED: SHOW ONLY WHEN STATUS IS INTERESTED */}
+                        {callOutcome === 'Interested' && (
+                          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '20px 0' }}>
+                            <span className="form-label" style={{ margin: 0 }}>Enquiry Received:</span>
+                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                              <input type="radio" name="enquiry" value="Yes" checked={enquiryReceived === 'Yes'} onChange={() => setEnquiryReceived('Yes')} /> Yes
+                            </label>
+                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                              <input type="radio" name="enquiry" value="No" checked={enquiryReceived === 'No'} onChange={() => setEnquiryReceived('No')} /> No
+                            </label>
+                          </div>
+                        )}
+
+                        <div className="form-group">
+                          <textarea 
+                            className="form-input" 
+                            rows="2" 
+                            placeholder="Remarks / Note about the call..."
+                            value={callNotes}
+                            onChange={(e) => setCallNotes(e.target.value)}
+                          ></textarea>
+                        </div>
+                        <button 
+                          onClick={submitCallOutcome} 
+                          className="btn-primary" 
+                          style={{ background: isSubmitting ? '#4b5563' : 'var(--success)', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}
+                          disabled={isSubmitting}
+                        >
+                          {isSubmitting ? 'Syncing...' : 'Sync & Update Status'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* HANDSET CALL TRIGGER FOR SELECTED LEAD */}
+                {selectedLead && !activeCall && (
+                  <div className="detail-card">
+                    <div className="detail-header">
+                      <div className="detail-title">
+                        <h2>{selectedLead.name || 'Unnamed Lead'}</h2>
+                        <div className="detail-phone">{selectedLead.number}</div>
+                      </div>
+                      <span className="status-badge pending">Pending Call</span>
+                    </div>
+                    <div className="call-action-box">
+                      <button onClick={() => triggerCall(selectedLead.number, selectedLead.name)} className="btn-call">
+                        <span>📞</span> Call via Handset
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* CALL HISTORY CONTAINER */}
+                <div className="history-box">
+                  <h3 className="history-title">📊 Call History Logs ({filteredLogs.length})</h3>
+                  <div className="table-wrapper" style={{ maxHeight: '450px' }}>
+                    <table className="logs-table">
+                      <thead>
+                        <tr>
+                          <th>Time</th>
+                          {user.role !== 'Executive' && <th>Executive</th>}
+                          <th>Lead Name</th>
+                          <th>Phone</th>
+                          <th>Company</th>
+                          <th>Address</th>
+                          <th>Email</th>
+                          <th>Format</th>
+                          <th>Duration</th>
+                          <th>Outcome</th>
+                          <th>Enquiry</th>
+                          <th>Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredLogs.map(log => (
+                          <tr key={log.id}>
+                            <td>{new Date(log.date).toLocaleTimeString()}</td>
+                            {user.role !== 'Executive' && <td>{log.syncedBy}</td>}
+                            <td>{log.contactName || log.name || '-'}</td>
+                            <td>{log.number}</td>
+                            <td>{log.companyName || '-'}</td>
+                            <td>{log.address || '-'}</td>
+                            <td>{log.email || '-'}</td>
+                            <td>{log.format && log.format !== 'Select Format' ? log.format : '-'}</td>
+                            <td>{formatDuration(log.duration)}</td>
+                            <td>
+                              <span className={`badge-outcome ${log.status?.toLowerCase().replace(' ', '-') || 'busy'}`}>
+                                {log.status || 'No Status'}
+                              </span>
+                            </td>
+                            <td>{log.enquiryReceived || 'No'}</td>
+                            <td style={{ color: 'var(--text-secondary)' }}>{log.description || '-'}</td>
+                          </tr>
+                        ))}
+                        {filteredLogs.length === 0 && (
+                          <tr>
+                            <td colSpan={user.role !== 'Executive' ? 12 : 11} className="empty-state">
+                              No call history logs found matching current filters.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* HOURLY PERFORMANCE REPORT TABLE */}
+                <div className="hourly-report-card">
+                  <h3 className="hourly-report-header">
+                    📈 Hourly Performance (Daily Target: 30 | Active Days: {numDays})
+                  </h3>
+                  <div className="table-wrapper hourly-table-wrapper" style={{ maxHeight: '750px' }}>
+                    <table className="logs-table" style={{ minWidth: '700px' }}>
+                      <thead>
+                        <tr>
+                          <th>Time Slot</th>
+                          <th>Planned Calls</th>
+                          <th>Actual Calls</th>
+                          <th>Achievement</th>
+                          <th>Performance Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {hourlyPerformance.map(row => (
+                          <tr key={row.label}>
+                            <td><strong>{row.label}</strong></td>
+                            <td>{row.planned}</td>
+                            <td><strong>{row.actual}</strong></td>
+                            <td>{row.achievementPct}%</td>
+                            <td>
+                              <span className={`badge-perf ${row.statusClass}`}>
+                                {row.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                        <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderTop: '2px solid rgba(255, 255, 255, 0.15)' }}>
+                          <td><strong>Total Summary</strong></td>
+                          <td><strong>{totalPlanned}</strong></td>
+                          <td><strong>{totalActual}</strong></td>
+                          <td><strong>{totalAchievementPct}%</strong></td>
+                          <td>
+                            <span className={`badge-perf ${overallPerf.className}`}>
+                              {overallPerf.label}
+                            </span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* COLUMN 3: RIGHT SIDE */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: '1150px' }}>
+                {/* BOX 1: INTERESTED */}
+                <div className="stat-card" style={{ padding: '16px', borderTop: '3px solid var(--success)', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                  <h4 style={{ fontSize: '13px', color: '#34d399', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>
+                    🟢 Interested Calls ({interestedList.length})
+                  </h4>
+                  <div className="right-column-list">
+                    {interestedList.map(item => (
+                      <div 
+                        key={item.id} 
+                        style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', border: '1px solid var(--border-color)', minWidth: '220px' }}
+                        onClick={() => { if (user.role === 'Executive') triggerCall(item.number, item.name); }}
+                      >
+                        <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || 'Unnamed'}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>📞 {item.number}</div>
+                      </div>
+                    ))}
+                    {interestedList.length === 0 && <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '20px' }}>No records.</div>}
+                  </div>
+                </div>
+
+                {/* BOX 2: FOLLOW UP */}
+                <div className="stat-card" style={{ padding: '16px', borderTop: '3px solid var(--warning)', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                  <h4 style={{ fontSize: '13px', color: '#fbbf24', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>
+                    🟡 Follow Up Calls ({followUpList.length})
+                  </h4>
+                  <div className="right-column-list">
+                    {followUpList.map(item => (
+                      <div 
+                        key={item.id} 
+                        style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', border: '1px solid var(--border-color)', minWidth: '220px' }}
+                        onClick={() => { if (user.role === 'Executive') triggerCall(item.number, item.name); }}
+                      >
+                        <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || 'Unnamed'}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>📞 {item.number}</div>
+                      </div>
+                    ))}
+                    {followUpList.length === 0 && <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '20px' }}>No records.</div>}
+                  </div>
+                </div>
+
+                {/* BOX 3: PROSPECT */}
+                <div className="stat-card" style={{ padding: '16px', borderTop: '3px solid var(--accent-secondary)', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                  <h4 style={{ fontSize: '13px', color: '#f472b6', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>
+                    🌸 Prospect Calls ({prospectList.length})
+                  </h4>
+                  <div className="right-column-list">
+                    {prospectList.map(item => (
+                      <div 
+                        key={item.id} 
+                        style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', border: '1px solid var(--border-color)', minWidth: '220px' }}
+                        onClick={() => { if (user.role === 'Executive') triggerCall(item.number, item.name); }}
+                      >
+                        <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || 'Unnamed'}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>📞 {item.number}</div>
+                      </div>
+                    ))}
+                    {prospectList.length === 0 && <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '20px' }}>No records.</div>}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </>
+        ) : activeTab === 'team' ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '350px minmax(0, 1fr)', gap: '20px', width: '100%', alignItems: 'start' }}>
+            
+            {/* LEFT CONTROL PANEL */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              
+              {/* Category form (Admin only) */}
+              {user.role === 'Admin' && (
+                <div className="stat-card" style={{ padding: '20px' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '15px', color: 'var(--accent-secondary)' }}>Add Category</h3>
+                  <form onSubmit={handleAddCategory} style={{ display: 'flex', gap: '10px' }}>
+                    <input 
+                      type="text" 
+                      placeholder="Category Name" 
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      className="form-input"
+                      style={{ padding: '10px 12px' }}
+                      required
+                    />
+                    <button type="submit" className="btn-logout" style={{ background: 'var(--accent-gradient)', borderColor: 'transparent', color: 'white', whiteSpace: 'nowrap' }}>
+                      Add
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* Assign Leads Form (Manager & TL only) */}
+              {(user.role === 'Manager' || user.role === 'TL') && (
+                <div className="stat-card" style={{ padding: '20px' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '15px', color: 'var(--success)' }}>Assign Leads</h3>
+                  <form onSubmit={handleAssignLeads}>
+                    <div className="form-group" style={{ marginBottom: '12px' }}>
+                      <label className="form-label">Phone Numbers</label>
+                      <textarea
+                        placeholder="Enter phone numbers (one per line or separated by commas)"
+                        value={assignForm.numbersText}
+                        onChange={(e) => setAssignForm({ ...assignForm, numbersText: e.target.value })}
+                        className="form-input"
+                        rows="4"
+                        style={{ padding: '10px 12px', resize: 'vertical' }}
+                        required
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: '15px' }}>
+                      <label className="form-label">Assign To</label>
+                      <select
+                        value={assignForm.assignedTo}
+                        onChange={(e) => setAssignForm({ ...assignForm, assignedTo: e.target.value })}
+                        className="filter-select"
+                        style={{ width: '100%', padding: '10px' }}
+                        required
+                      >
+                        <option value="">Select subordinate...</option>
+                        {teamMembers.map(m => (
+                          <option key={m.empId} value={m.empId}>{m.name} ({m.role})</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button type="submit" className="btn-primary" style={{ padding: '12px', fontSize: '14px' }}>
+                      Assign Contacts
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* Add User Control Card */}
+              <div className="stat-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--accent-primary)' }}>Manage Team</h3>
+                <button 
+                  onClick={() => {
+                    setEditingUser(null);
+                    setUserForm({
+                      name: '',
+                      email: '',
+                      phone: '',
+                      empId: '',
+                      password: '',
+                      role: user.role === 'Admin' ? 'Manager' : (user.role === 'Manager' ? 'TL' : 'Executive'),
+                      reportsTo: user.empId,
+                      category: ''
+                    });
+                    setShowUserModal(true);
+                  }}
+                  className="btn-primary"
+                  style={{ padding: '12px', fontSize: '14px' }}
+                >
+                  ➕ Add {user.role === 'Admin' ? 'Manager' : (user.role === 'Manager' ? 'TL / Executive' : 'Executive')}
+                </button>
+              </div>
+
+            </div>
+
+            {/* RIGHT PANEL - SUBORDINATES LIST */}
+            <div className="history-box" style={{ margin: 0, padding: '20px', display: 'flex', flexDirection: 'column', minHeight: '600px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>👥 Team Members Directory</h3>
+                <span className="badge-perf badge-perf-excellent" style={{ padding: '6px 12px' }}>
+                  {teamMembers.length} Active Subordinates
+                </span>
+              </div>
+
+              <div className="table-wrapper" style={{ maxHeight: '700px', flex: 1 }}>
                 <table className="logs-table">
                   <thead>
                     <tr>
-                      <th>Time</th>
-                      {user.role !== 'Executive' && <th>Executive</th>}
-                      <th>Lead Name</th>
-                      <th>Phone</th>
-                      <th>Company</th>
-                      <th>Address</th>
+                      <th>Emp ID</th>
+                      <th>Name</th>
+                      <th>Role</th>
                       <th>Email</th>
-                      <th>Format</th>
-                      <th>Duration</th>
-                      <th>Outcome</th>
-                      <th>Enquiry</th>
-                      <th>Notes</th>
+                      <th>Phone</th>
+                      <th>Reports To</th>
+                      <th>Category</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredLogs.map(log => (
-                      <tr key={log.id}>
-                        <td>{new Date(log.date).toLocaleTimeString()}</td>
-                        {user.role !== 'Executive' && <td>{log.syncedBy}</td>}
-                        <td>{log.contactName || log.name || '-'}</td>
-                        <td>{log.number}</td>
-                        <td>{log.companyName || '-'}</td>
-                        <td>{log.address || '-'}</td>
-                        <td>{log.email || '-'}</td>
-                        <td>{log.format && log.format !== 'Select Format' ? log.format : '-'}</td>
-                        <td>{formatDuration(log.duration)}</td>
+                    {teamMembers.map(m => (
+                      <tr key={m.empId}>
+                        <td><strong>{m.empId}</strong></td>
+                        <td>{m.name}</td>
                         <td>
-                          <span className={`badge-outcome ${log.status?.toLowerCase().replace(' ', '-') || 'busy'}`}>
-                            {log.status || 'No Status'}
+                          <span className={`badge-outcome ${m.role?.toLowerCase() === 'manager' ? 'interested' : (m.role?.toLowerCase() === 'tl' ? 'follow-up' : 'prospect')}`}>
+                            {m.role || 'Executive'}
                           </span>
                         </td>
-                        <td>{log.enquiryReceived || 'No'}</td>
-                        <td style={{ color: 'var(--text-secondary)' }}>{log.description || '-'}</td>
+                        <td>{m.email || '-'}</td>
+                        <td>{m.phone || '-'}</td>
+                        <td>{m.reportsTo || 'System Admin'}</td>
+                        <td>{m.category || '-'}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button 
+                              onClick={() => {
+                                setEditingUser(m);
+                                setUserForm({
+                                  name: m.name || '',
+                                  email: m.email || '',
+                                  phone: m.phone || '',
+                                  empId: m.empId || '',
+                                  password: '',
+                                  role: m.role || 'Executive',
+                                  reportsTo: m.reportsTo || '',
+                                  category: m.category || ''
+                                });
+                                setShowUserModal(true);
+                              }}
+                              className="btn-logout"
+                              style={{ padding: '4px 8px', fontSize: '11px', borderColor: 'var(--info)', color: 'var(--info)' }}
+                            >
+                              Edit
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteUser(m.empId)}
+                              className="btn-logout"
+                              style={{ padding: '4px 8px', fontSize: '11px', borderColor: 'var(--danger)', color: 'var(--danger)' }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
-                    {filteredLogs.length === 0 && (
+                    {teamMembers.length === 0 && (
                       <tr>
-                        <td colSpan={user.role !== 'Executive' ? 12 : 11} className="empty-state">
-                          No call history logs found matching current filters.
+                        <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-secondary)' }}>
+                          No team members found. Start by creating one.
                         </td>
                       </tr>
                     )}
@@ -927,124 +1524,356 @@ function App() {
               </div>
             </div>
 
-            {/* HOURLY PERFORMANCE REPORT TABLE (INCREASED HEIGHT TO FULLY RENDER ALL DATA ROWS WITHOUT INTERNAL CLIPPING) */}
-            <div className="hourly-report-card">
-              <h3 className="hourly-report-header">
-                📈 Hourly Performance (Daily Target: 30 | Active Days: {numDays})
-              </h3>
-              <div className="table-wrapper hourly-table-wrapper" style={{ maxHeight: '750px' }}>
-                <table className="logs-table" style={{ minWidth: '700px' }}>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '350px minmax(0, 1fr)', gap: '20px', width: '100%', alignItems: 'start' }}>
+            {/* LEFT CONTROL PANEL - LEADS TAB */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div className="stat-card" style={{ padding: '20px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '15px', color: 'var(--success)' }}>Assign New Leads</h3>
+                <form onSubmit={handleAssignLeads}>
+                  <div className="form-group" style={{ marginBottom: '12px' }}>
+                    <label className="form-label">Phone Numbers</label>
+                    <textarea
+                      placeholder="Enter phone numbers (one per line or separated by commas)"
+                      value={assignForm.numbersText}
+                      onChange={(e) => setAssignForm({ ...assignForm, numbersText: e.target.value })}
+                      className="form-input"
+                      rows="5"
+                      style={{ padding: '10px 12px', resize: 'vertical' }}
+                      required
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: '15px' }}>
+                    <label className="form-label">Assign To</label>
+                    <select
+                      value={assignForm.assignedTo}
+                      onChange={(e) => setAssignForm({ ...assignForm, assignedTo: e.target.value })}
+                      className="filter-select"
+                      style={{ width: '100%', padding: '10px' }}
+                      required
+                    >
+                      <option value="">Select subordinate...</option>
+                      {teamMembers.map(m => (
+                        <option key={m.empId} value={m.empId}>{m.name} ({m.role})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button type="submit" className="btn-primary" style={{ padding: '12px', fontSize: '14px' }}>
+                    Assign Contacts
+                  </button>
+                </form>
+              </div>
+
+              <div className="stat-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--accent-primary)' }}>Google Sheet Integration</h3>
+                <button 
+                  onClick={syncGoogleSheet} 
+                  className="btn-primary"
+                  style={{ background: 'var(--success)', padding: '12px', fontSize: '14px' }}
+                >
+                  {syncStatus || '🔄 Sync Leads from Sheet'}
+                </button>
+              </div>
+            </div>
+
+            {/* RIGHT PANEL - LEADS DIRECTORY TABLE */}
+            <div className="history-box" style={{ margin: 0, padding: '20px', display: 'flex', flexDirection: 'column', minHeight: '600px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>📞 Team Leads Directory</h3>
+                <span className="badge-perf badge-perf-excellent" style={{ padding: '6px 12px' }}>
+                  {leads.length} Leads Total
+                </span>
+              </div>
+
+              <div className="table-wrapper" style={{ maxHeight: '700px', flex: 1 }}>
+                <table className="logs-table">
                   <thead>
                     <tr>
-                      <th>Time Slot</th>
-                      <th>Planned Calls</th>
-                      <th>Actual Calls</th>
-                      <th>Achievement</th>
-                      <th>Performance Status</th>
+                      <th>Phone</th>
+                      <th>Name</th>
+                      <th>Assigned To</th>
+                      <th>Assigned By</th>
+                      <th>Assigned At</th>
+                      <th>Status</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {hourlyPerformance.map(row => (
-                      <tr key={row.label}>
-                        <td><strong>{row.label}</strong></td>
-                        <td>{row.planned}</td>
-                        <td><strong>{row.actual}</strong></td>
-                        <td>{row.achievementPct}%</td>
+                    {leads.map(lead => (
+                      <tr key={lead.number}>
+                        <td><strong>{lead.number}</strong></td>
+                        <td>{lead.name || 'Unnamed Lead'}</td>
                         <td>
-                          <span className={`badge-perf ${row.statusClass}`}>
-                            {row.status}
+                          <span style={{ fontWeight: '600' }}>
+                            {lead.assignedToName || 'Unknown'} (ID: {lead.assignedTo})
                           </span>
+                        </td>
+                        <td>{lead.assignedByName || 'System'}</td>
+                        <td>{lead.assignedAt ? new Date(lead.assignedAt).toLocaleString() : '-'}</td>
+                        <td>
+                          <span className={`badge-outcome ${lead.status?.toLowerCase() === 'pending' ? 'follow-up' : 'busy'}`}>
+                            {lead.status || 'Pending'}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button 
+                              onClick={(e) => handleRemoveLead(e, lead.number)}
+                              className="btn-logout"
+                              style={{ padding: '4px 8px', fontSize: '11px', borderColor: 'var(--danger)', color: 'var(--danger)', background: 'transparent' }}
+                            >
+                              Remove
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setTransferringLead(lead);
+                                setTransferToEmpId('');
+                              }}
+                              className="btn-logout"
+                              style={{ padding: '4px 8px', fontSize: '11px', borderColor: 'var(--info)', color: 'var(--info)', background: 'transparent' }}
+                            >
+                              Transfer
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
-                    
-                    {/* TOTAL SUMMARY ROW */}
-                    <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderTop: '2px solid rgba(255, 255, 255, 0.15)' }}>
-                      <td><strong>Total Summary</strong></td>
-                      <td><strong>{totalPlanned}</strong></td>
-                      <td><strong>{totalActual}</strong></td>
-                      <td><strong>{totalAchievementPct}%</strong></td>
-                      <td>
-                        <span className={`badge-perf ${overallPerf.className}`}>
-                          {overallPerf.label}
-                        </span>
-                      </td>
-                    </tr>
+                    {leads.length === 0 && (
+                      <tr>
+                        <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-secondary)' }}>
+                          No leads assigned. Sync from sheet or input manually.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
-
           </div>
-
-          {/* COLUMN 3: RIGHT SIDE */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: '1150px' }}>
-            
-            {/* BOX 1: INTERESTED */}
-            <div className="stat-card" style={{ padding: '16px', borderTop: '3px solid var(--success)', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <h4 style={{ fontSize: '13px', color: '#34d399', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>
-                🟢 Interested Calls ({interestedList.length})
-              </h4>
-              <div className="right-column-list">
-                {interestedList.map(item => (
-                  <div 
-                    key={item.id} 
-                    style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', border: '1px solid var(--border-color)', minWidth: '220px' }}
-                    onClick={() => { if (user.role === 'Executive') triggerCall(item.number, item.name); }}
-                  >
-                    <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || 'Unnamed'}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>📞 {item.number}</div>
-                  </div>
-                ))}
-                {interestedList.length === 0 && <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '20px' }}>No records.</div>}
-              </div>
-            </div>
-
-            {/* BOX 2: FOLLOW UP */}
-            <div className="stat-card" style={{ padding: '16px', borderTop: '3px solid var(--warning)', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <h4 style={{ fontSize: '13px', color: '#fbbf24', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>
-                🟡 Follow Up Calls ({followUpList.length})
-              </h4>
-              <div className="right-column-list">
-                {followUpList.map(item => (
-                  <div 
-                    key={item.id} 
-                    style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', border: '1px solid var(--border-color)', minWidth: '220px' }}
-                    onClick={() => { if (user.role === 'Executive') triggerCall(item.number, item.name); }}
-                  >
-                    <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || 'Unnamed'}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>📞 {item.number}</div>
-                  </div>
-                ))}
-                {followUpList.length === 0 && <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '20px' }}>No records.</div>}
-              </div>
-            </div>
-
-            {/* BOX 3: PROSPECT */}
-            <div className="stat-card" style={{ padding: '16px', borderTop: '3px solid var(--accent-secondary)', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <h4 style={{ fontSize: '13px', color: '#f472b6', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>
-                🌸 Prospect Calls ({prospectList.length})
-              </h4>
-              <div className="right-column-list">
-                {prospectList.map(item => (
-                  <div 
-                    key={item.id} 
-                    style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', border: '1px solid var(--border-color)', minWidth: '220px' }}
-                    onClick={() => { if (user.role === 'Executive') triggerCall(item.number, item.name); }}
-                  >
-                    <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || 'Unnamed'}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>📞 {item.number}</div>
-                  </div>
-                ))}
-                {prospectList.length === 0 && <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '20px' }}>No records.</div>}
-              </div>
-            </div>
-
-          </div>
-
-        </div>
+        )}
 
       </div>
+
+      {/* ADD / EDIT USER OVERLAY MODAL */}
+      {showUserModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.85)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div className="auth-card" style={{ maxWidth: '550px', padding: '30px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
+            <h3 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '20px', color: 'white' }}>
+              {editingUser ? `✏️ Edit Profile: ${editingUser.name}` : '➕ Add Team Member'}
+            </h3>
+            
+            <form onSubmit={handleSaveUser}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div className="form-group">
+                  <label className="form-label">Full Name</label>
+                  <input 
+                    type="text" 
+                    value={userForm.name} 
+                    onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
+                    className="form-input"
+                    placeholder="John Doe"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Employee ID</label>
+                  <input 
+                    type="text" 
+                    value={userForm.empId} 
+                    onChange={(e) => setUserForm({ ...userForm, empId: e.target.value })}
+                    className="form-input"
+                    placeholder="Numeric ID (leave empty for auto)"
+                    disabled={!!editingUser}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Email Address</label>
+                  <input 
+                    type="email" 
+                    value={userForm.email} 
+                    onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                    className="form-input"
+                    placeholder="john@example.com"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Phone Number</label>
+                  <input 
+                    type="text" 
+                    value={userForm.phone} 
+                    onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
+                    className="form-input"
+                    placeholder="10-digit number"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Password</label>
+                  <input 
+                    type="password" 
+                    value={userForm.password} 
+                    onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                    className="form-input"
+                    placeholder={editingUser ? "Leave blank to keep current" : "••••••••"}
+                    required={!editingUser}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Select Role</label>
+                  <select 
+                    value={userForm.role} 
+                    onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
+                    className="filter-select"
+                    style={{ width: '100%', padding: '12px' }}
+                    required
+                  >
+                    {user.role === 'Admin' && <option value="Manager">Manager</option>}
+                    {user.role === 'Admin' && <option value="TL">Team Leader</option>}
+                    {user.role === 'Admin' && <option value="Executive">Executive</option>}
+                    {user.role === 'Manager' && <option value="TL">Team Leader</option>}
+                    {user.role === 'Manager' && <option value="Executive">Executive</option>}
+                    {user.role === 'TL' && <option value="Executive">Executive</option>}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Reports To (Emp ID)</label>
+                  <input 
+                    type="text" 
+                    value={userForm.reportsTo} 
+                    onChange={(e) => setUserForm({ ...userForm, reportsTo: e.target.value })}
+                    className="form-input"
+                    placeholder="Reports to ID"
+                    required={userForm.role !== 'Manager'}
+                    disabled={user.role !== 'Admin'} // Direct reports to Managers/TLs are pre-assigned unless Admin edits
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Assign Category</label>
+                  <select 
+                    value={userForm.category} 
+                    onChange={(e) => setUserForm({ ...userForm, category: e.target.value })}
+                    className="filter-select"
+                    style={{ width: '100%', padding: '12px' }}
+                  >
+                    <option value="">No Specific Category</option>
+                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
+                <button type="submit" className="btn-primary" style={{ flex: 1, padding: '12px' }}>
+                  Save User
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => { setShowUserModal(false); setEditingUser(null); }} 
+                  className="btn-logout"
+                  style={{ flex: 1, padding: '12px' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* TRANSFER LEAD OVERLAY MODAL */}
+      {transferringLead && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.85)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1001,
+          padding: '20px'
+        }}>
+          <div className="auth-card" style={{ maxWidth: '400px', padding: '30px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>
+              🔄 Transfer Lead: {transferringLead.number}
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+              Current Assignee: {transferringLead.assignedToName || 'Unknown'} (ID: {transferringLead.assignedTo})
+            </p>
+            
+            <div className="form-group" style={{ marginBottom: '20px' }}>
+              <label className="form-label">Transfer To</label>
+              <select
+                value={transferToEmpId}
+                onChange={(e) => setTransferToEmpId(e.target.value)}
+                className="filter-select"
+                style={{ width: '100%', padding: '10px' }}
+                required
+              >
+                <option value="">Select recipient...</option>
+                {teamMembers.map(m => (
+                  <option key={m.empId} value={m.empId}>{m.name} ({m.role})</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: '15px' }}>
+              <button 
+                onClick={async () => {
+                  if (!transferToEmpId) return;
+                  try {
+                    const res = await fetch(`${API_BASE}/contacts/assign`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        numbers: [transferringLead.number],
+                        assignedTo: transferToEmpId,
+                        assignedBy: user.empId
+                      })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                      alert("Lead transferred successfully!");
+                      setTransferringLead(null);
+                      fetchLeads();
+                    } else {
+                      alert(data.message || "Failed to transfer");
+                    }
+                  } catch (err) {
+                    alert("Error transferring lead");
+                  }
+                }}
+                className="btn-primary" 
+                style={{ flex: 1, padding: '12px' }}
+              >
+                Confirm
+              </button>
+              <button 
+                onClick={() => setTransferringLead(null)} 
+                className="btn-logout"
+                style={{ flex: 1, padding: '12px' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* FOOTER SECTION */}
       <footer className="dashboard-footer">
