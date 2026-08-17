@@ -139,10 +139,10 @@ function App() {
         return { ...prev, status: data.status };
       });
 
-      if (data.status === 'Active') {
+      if (data.status === 'Active' || data.status === 'Offhook') {
         setCallStartTime(Date.now());
         startTimer();
-      } else if (data.status === 'Completed' || data.status === 'Disconnected') {
+      } else if (data.status === 'Completed' || data.status === 'Disconnected' || data.status === 'Idle') {
         stopTimer();
       }
     });
@@ -515,6 +515,62 @@ function App() {
       }
     } catch (e) {
       alert('Failed to sync outcome. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCallOutcomeClick = (outcome) => {
+    setCallOutcome(outcome);
+    if (outcome === 'Busy' || outcome === 'No Answer') {
+      autoSubmitUnconnected(outcome);
+    }
+  };
+
+  const autoSubmitUnconnected = async (outcome) => {
+    if (!activeCall || isSubmitting) return;
+    setIsSubmitting(true);
+    const callRecord = {
+      id: Date.now().toString(),
+      number: activeCall.phoneNumber,
+      name: contactName || activeCall.name,
+      type: 2, // Outgoing
+      duration: 0, // Unconnected call has 0 duration
+      date: Date.now(),
+      status: outcome,
+      syncedBy: user.name,
+      syncedByEmpId: user.empId,
+      category: user.category,
+      description: 'Auto-logged as ' + outcome,
+      enquiryReceived: 'No',
+      contactName: contactName,
+      companyName: companyName,
+      address: address,
+      email: email,
+      format: callFormat,
+      isSaved: true
+    };
+    try {
+      const res = await fetch(`${API_BASE}/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userName: user.name,
+          empId: user.empId,
+          logs: [callRecord]
+        })
+      });
+      if (res.ok) {
+        setLeads(prev => prev.filter(l => l.number !== activeCall.phoneNumber));
+        setSelectedLead(null);
+        setActiveCall(null);
+        stopTimer();
+        alert(`Call auto-logged as ${outcome}!`);
+        fetchLeads();
+        fetchLogs();
+      }
+    } catch (e) {
+      alert('Failed to auto-log outcome. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -1306,7 +1362,7 @@ function App() {
                             <button 
                               key={outcome} 
                               className={`outcome-btn ${callOutcome === outcome ? 'active' : ''}`}
-                              onClick={() => setCallOutcome(outcome)}
+                              onClick={() => handleCallOutcomeClick(outcome)}
                             >
                               {outcome}
                             </button>
