@@ -802,7 +802,7 @@ function App() {
   const followUpCalls = logs.filter(l => l.status && l.status.toLowerCase() === 'follow up').length;
   const prospectCalls = logs.filter(l => l.status && l.status.toLowerCase() === 'prospect').length;
   const enquiryCalls = logs.filter(l => l.enquiryReceived && l.enquiryReceived.toLowerCase() === 'yes').length;
-  const missedCalls = logs.filter(l => l.type === 3 || l.type === '3' || l.status === 'No Answer' || l.status === 'Busy').length;
+  const missedCalls = logs.filter(l => l.type === 3 || l.type === '3' || l.status === 'No Answer' || l.status === 'Not Answering' || l.status === 'Busy' || Number(l.duration) === 0).length;
 
   // Percentage Calculations
   const getPercentage = (count) => {
