@@ -522,7 +522,7 @@ function App() {
 
   const handleCallOutcomeClick = (outcome) => {
     setCallOutcome(outcome);
-    if (outcome === 'Busy' || outcome === 'No Answer') {
+    if (outcome === 'Busy' || outcome === 'Not Answering') {
       autoSubmitUnconnected(outcome);
     }
   };
@@ -787,7 +787,7 @@ function App() {
       if (statusFilter === 'Enquiry') {
         matchesStatus = log.enquiryReceived && log.enquiryReceived.toLowerCase() === 'yes';
       } else if (statusFilter === 'Missed') {
-        matchesStatus = log.type === 3 || log.type === '3' || log.status === 'No Answer' || log.status === 'Busy';
+        matchesStatus = log.type === 3 || log.type === '3' || log.status === 'No Answer' || log.status === 'Not Answering' || log.status === 'Busy';
       } else {
         matchesStatus = log.status && log.status.toLowerCase() === statusFilter.toLowerCase();
       }
@@ -887,7 +887,7 @@ function App() {
       outcomeCounts['Follow Up']++;
     } else if (status === 'Prospect') {
       outcomeCounts['Prospect']++;
-    } else if (status === 'Busy' || status === 'No Answer' || status === 'Not Interested') {
+    } else if (status === 'Busy' || status === 'No Answer' || status === 'Not Answering' || status === 'Not Interested') {
       outcomeCounts['Missed/Busy']++;
     } else if (status === 'Called') {
       outcomeCounts['Called']++;
@@ -1358,7 +1358,7 @@ function App() {
                       <div className="outcome-box" style={{ marginTop: '20px' }}>
                         <h4 className="outcome-title">Call Outcome (Duration: {formatDuration(callTimer)})</h4>
                         <div className="outcome-options" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                          {['Interested', 'Follow Up', 'Prospect', 'Not Interested', 'Busy', 'No Answer'].map(outcome => (
+                          {['Interested', 'Follow Up', 'Prospect', 'Not Interested', 'Busy', 'Not Answering'].map(outcome => (
                             <button 
                               key={outcome} 
                               className={`outcome-btn ${callOutcome === outcome ? 'active' : ''}`}
