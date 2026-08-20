@@ -208,8 +208,8 @@ function App() {
   const fetchAllUsers = async () => {
     try {
       const res = await fetch(`${API_BASE}/getAllUsers`);
+      const data = await res.json();
       if (res.ok) {
-        const data = await res.json();
         setAllUsers(data);
       }
     } catch (e) {
@@ -273,8 +273,8 @@ function App() {
   const fetchLeads = async () => {
     try {
       const res = await fetch(`${API_BASE}/contacts/assigned/${user.empId}`);
+      const data = await res.json();
       if (res.ok) {
-        const data = await res.json();
         setLeads(data);
       }
     } catch (e) {
@@ -504,7 +504,8 @@ function App() {
         })
       });
 
-      if (res.ok) {
+      const data = await res.json();
+      if (res.ok && data.saved && data.sheetsSynced) {
         setLeads(prev => prev.filter(l => l.number !== activeCall.phoneNumber));
         setSelectedLead(null);
         setActiveCall(null);
@@ -512,6 +513,10 @@ function App() {
         alert('Call synced successfully!');
         fetchLeads();
         fetchLogs();
+      } else if (res.ok && data.saved) {
+        alert('Saved in the app, but Google Sheets sync failed. Please retry.');
+      } else {
+        alert('Failed to save outcome. Please try again.');
       }
     } catch (e) {
       alert('Failed to sync outcome. Please try again.');
@@ -560,7 +565,8 @@ function App() {
           logs: [callRecord]
         })
       });
-      if (res.ok) {
+      const data = await res.json();
+      if (res.ok && data.saved && data.sheetsSynced) {
         setLeads(prev => prev.filter(l => l.number !== activeCall.phoneNumber));
         setSelectedLead(null);
         setActiveCall(null);
@@ -568,6 +574,10 @@ function App() {
         alert(`Call auto-logged as ${outcome}!`);
         fetchLeads();
         fetchLogs();
+      } else if (res.ok && data.saved) {
+        alert('Saved in the app, but Google Sheets sync failed. Please retry.');
+      } else {
+        alert('Failed to save outcome. Please try again.');
       }
     } catch (e) {
       alert('Failed to auto-log outcome. Please try again.');
