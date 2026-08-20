@@ -68,6 +68,7 @@ function App() {
   // Admin/Manager States
   const [teamMembers, setTeamMembers] = useState([]);
   const [selectedMember, setSelectedMember] = useState('All');
+  const [selectedLeadManager, setSelectedLeadManager] = useState('All');
   const [liveCalls, setLiveCalls] = useState({}); // empId -> { phoneNumber, status, timestamp }
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [syncStatus, setSyncStatus] = useState('');
@@ -89,6 +90,24 @@ function App() {
     reportsTo: '',
     category: ''
   });
+
+  const [historyLogs, setHistoryLogs] = useState([]);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyNumber, setHistoryNumber] = useState('');
+
+  const fetchContactHistory = async (number) => {
+    try {
+      const res = await fetch(`${API_BASE}/contacts/history/${number}`);
+      if (res.ok) {
+        const data = await res.json();
+        setHistoryLogs(data);
+        setHistoryNumber(number);
+        setShowHistoryModal(true);
+      }
+    } catch (err) {
+      console.error('Error fetching contact history:', err);
+    }
+  };
   
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assignForm, setAssignForm] = useState({
@@ -236,7 +255,7 @@ function App() {
     } else if (activeTab === 'leads') {
       fetchTeamLeads();
     }
-  }, [activeTab, user]);
+  }, [activeTab, user, selectedLeadManager]);
 
   // Set team members based on hierarchy when allUsers updates
   useEffect(() => {
@@ -284,7 +303,8 @@ function App() {
 
   const fetchTeamLeads = async () => {
     try {
-      const res = await fetch(`${API_BASE}/contacts/team/${user.empId}`);
+      const targetId = (user.role === 'Admin' && selectedLeadManager !== 'All') ? selectedLeadManager : user.empId;
+      const res = await fetch(`${API_BASE}/contacts/team/${targetId}`);
       if (res.ok) {
         const data = await res.json();
         setTeamLeads(data);
@@ -430,7 +450,7 @@ function App() {
     setSearchQuery('');
   };
 
-  const triggerCall = (number, name = 'Lead') => {
+  const triggerCall = async (number, name = 'Lead') => {
     if (!number || !socket) return;
     
     socket.emit('trigger-call', {
@@ -454,6 +474,21 @@ function App() {
     setAddress('');
     setEmail('');
     setCallFormat('Select Format');
+
+    try {
+      const res = await fetch(`${API_BASE}/contacts/details/${number}`);
+      if (res.ok) {
+        const details = await res.json();
+        if (details) {
+          setContactName(details.contactName || details.name || '');
+          setCompanyName(details.companyName || '');
+          setAddress(details.address || '');
+          setEmail(details.email || '');
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching details:', err);
+    }
   };
 
   const submitCallOutcome = async () => {
@@ -780,8 +815,19 @@ function App() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const latestLogsOnly = React.useMemo(() => {
+    const latestMap = new Map();
+    const sorted = [...logs].sort((a, b) => b.date - a.date);
+    for (const log of sorted) {
+      if (!latestMap.has(log.number)) {
+        latestMap.set(log.number, log);
+      }
+    }
+    return Array.from(latestMap.values());
+  }, [logs]);
+
   // CLIENT SIDE FILTERING LOGS
-  const filteredLogs = logs.filter(log => {
+  const filteredLogs = latestLogsOnly.filter(log => {
     const query = searchQuery.trim().toLowerCase();
     const matchesSearch = query === '' || 
       log.number.includes(query) ||
@@ -807,12 +853,12 @@ function App() {
   });
 
   // METRICS COMPUTATIONS
-  const totalCalls = logs.length;
-  const interestedCalls = logs.filter(l => l.status && l.status.toLowerCase() === 'interested').length;
-  const followUpCalls = logs.filter(l => l.status && l.status.toLowerCase() === 'follow up').length;
-  const prospectCalls = logs.filter(l => l.status && l.status.toLowerCase() === 'prospect').length;
-  const enquiryCalls = logs.filter(l => l.enquiryReceived && l.enquiryReceived.toLowerCase() === 'yes').length;
-  const missedCalls = logs.filter(l => l.type === 3 || l.type === '3' || l.status === 'No Answer' || l.status === 'Not Answering' || l.status === 'Busy' || Number(l.duration) === 0).length;
+  const totalCalls = latestLogsOnly.length;
+  const interestedCalls = latestLogsOnly.filter(l => l.status && l.status.toLowerCase() === 'interested').length;
+  const followUpCalls = latestLogsOnly.filter(l => l.status && l.status.toLowerCase() === 'follow up').length;
+  const prospectCalls = latestLogsOnly.filter(l => l.status && l.status.toLowerCase() === 'prospect').length;
+  const enquiryCalls = latestLogsOnly.filter(l => l.enquiryReceived && l.enquiryReceived.toLowerCase() === 'yes').length;
+  const missedCalls = latestLogsOnly.filter(l => l.type === 3 || l.type === '3' || l.status === 'No Answer' || l.status === 'Not Answering' || l.status === 'Busy' || Number(l.duration) === 0).length;
 
   // Percentage Calculations
   const getPercentage = (count) => {
@@ -871,9 +917,9 @@ function App() {
   const overallPerf = getPerformanceStatus(totalAchievementPct);
 
   // Quick Reference Lists
-  const interestedList = logs.filter(l => l.status && l.status.toLowerCase() === 'interested').slice(0, 20);
-  const followUpList = logs.filter(l => l.status && l.status.toLowerCase() === 'follow up').slice(0, 20);
-  const prospectList = logs.filter(l => l.status && l.status.toLowerCase() === 'prospect').slice(0, 20);
+  const interestedList = latestLogsOnly.filter(l => l.status && l.status.toLowerCase() === 'interested').slice(0, 20);
+  const followUpList = latestLogsOnly.filter(l => l.status && l.status.toLowerCase() === 'follow up').slice(0, 20);
+  const prospectList = latestLogsOnly.filter(l => l.status && l.status.toLowerCase() === 'prospect').slice(0, 20);
 
   // Group outcomes for Doughnut Chart
   const outcomeCounts = {
@@ -1307,7 +1353,15 @@ function App() {
                       >
                         <div>
                           <div className="lead-name">{lead.name || 'Unnamed Lead'}</div>
-                          <div className="lead-phone">📞 {lead.number}</div>
+                          <div className="lead-phone">
+                            📞 {lead.number}
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); fetchContactHistory(lead.number); }}
+                              style={{ marginLeft: '10px', background: 'transparent', border: 'none', color: '#60a5fa', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' }}
+                            >
+                              History
+                            </button>
+                          </div>
                         </div>
                         {user.role !== 'Executive' && (
                           <button 
@@ -1519,7 +1573,15 @@ function App() {
                             <td>{new Date(log.date).toLocaleTimeString()}</td>
                             {user.role !== 'Executive' && <td>{log.syncedBy}</td>}
                             <td>{log.contactName || log.name || '-'}</td>
-                            <td>{log.number}</td>
+                            <td>
+                              <span 
+                                onClick={() => fetchContactHistory(log.number)} 
+                                style={{ cursor: 'pointer', textDecoration: 'underline', color: '#60a5fa' }}
+                                title="Click to view history"
+                              >
+                                {log.number}
+                              </span>
+                            </td>
                             <td>{log.companyName || '-'}</td>
                             <td>{log.address || '-'}</td>
                             <td>{log.email || '-'}</td>
@@ -1891,9 +1953,27 @@ function App() {
             <div className="history-box" style={{ margin: 0, padding: '20px', display: 'flex', flexDirection: 'column', minHeight: '600px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                 <h3 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>📞 Team Leads Directory</h3>
-                <span className="badge-perf badge-perf-excellent" style={{ padding: '6px 12px' }}>
-                  {teamLeads.length} Leads Total
-                </span>
+                <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                  {user.role === 'Admin' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Filter Manager:</span>
+                      <select 
+                        value={selectedLeadManager} 
+                        onChange={(e) => setSelectedLeadManager(e.target.value)} 
+                        className="filter-select"
+                        style={{ padding: '6px 12px', fontSize: '13px', background: 'var(--bg-secondary)', color: 'white', border: '1px solid var(--border-color)', borderRadius: '4px' }}
+                      >
+                        <option value="All">All Managers</option>
+                        {allUsers.filter(m => m.role === 'Manager').map(m => (
+                          <option key={m.empId} value={m.empId}>{m.name} (ID: {m.empId})</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <span className="badge-perf badge-perf-excellent" style={{ padding: '6px 12px' }}>
+                    {teamLeads.length} Leads Total
+                  </span>
+                </div>
               </div>
 
               <div className="table-wrapper" style={{ maxHeight: '700px', flex: 1 }}>
@@ -1912,7 +1992,15 @@ function App() {
                   <tbody>
                     {teamLeads.map(lead => (
                       <tr key={lead.number}>
-                        <td><strong>{lead.number}</strong></td>
+                        <td>
+                          <strong 
+                            onClick={() => fetchContactHistory(lead.number)} 
+                            style={{ cursor: 'pointer', textDecoration: 'underline', color: '#60a5fa' }}
+                            title="Click to view history"
+                          >
+                            {lead.number}
+                          </strong>
+                        </td>
                         <td>{lead.name || 'Unnamed Lead'}</td>
                         <td>
                           <span style={{ fontWeight: '600' }}>
@@ -2181,6 +2269,63 @@ function App() {
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONTACT HISTORY OVERLAY MODAL */}
+      {showHistoryModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.85)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1002,
+          padding: '20px'
+        }}>
+          <div className="auth-card" style={{ maxWidth: '700px', width: '100%', padding: '30px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
+            <h3 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '20px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>📜 Call History for {historyNumber}</span>
+              <button 
+                onClick={() => setShowHistoryModal(false)}
+                className="btn-logout"
+                style={{ padding: '4px 10px', fontSize: '12px', border: '1px solid var(--border-color)', background: 'transparent' }}
+              >
+                Close
+              </button>
+            </h3>
+            
+            <div style={{ maxHeight: '400px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              {historyLogs.map(hLog => (
+                <div key={hLog.id} style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
+                    <strong>{new Date(hLog.date).toLocaleString()}</strong>
+                    <span className={`badge-outcome ${hLog.status?.toLowerCase().replace(' ', '-') || 'busy'}`}>
+                      {hLog.status || 'No Status'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '13px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                    <div><strong>Caller:</strong> {hLog.syncedBy || '-'}</div>
+                    <div><strong>Format:</strong> {hLog.format || '-'}</div>
+                    <div><strong>Company:</strong> {hLog.companyName || '-'}</div>
+                    <div><strong>Duration:</strong> {hLog.duration}s</div>
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#ccc' }}>
+                    <strong>Note:</strong> {hLog.description || '-'}
+                  </div>
+                </div>
+              ))}
+              {historyLogs.length === 0 && (
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  No previous call records found.
+                </div>
+              )}
             </div>
           </div>
         </div>
