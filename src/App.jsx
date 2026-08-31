@@ -133,6 +133,16 @@ function App() {
     }
   }, []);
 
+  const fetchLogsTimeoutRef = useRef(null);
+  const triggerCallTimeoutRef = useRef(null);
+
+  const debouncedFetchLogs = () => {
+    if (fetchLogsTimeoutRef.current) clearTimeout(fetchLogsTimeoutRef.current);
+    fetchLogsTimeoutRef.current = setTimeout(() => {
+      fetchLogs();
+    }, 500);
+  };
+
   // Establish WebSocket connection when user logs in
   useEffect(() => {
     if (!user) {
@@ -153,6 +163,10 @@ function App() {
 
     newSocket.on('call-state-update', (data) => {
       console.log('Call state update:', data);
+      if (triggerCallTimeoutRef.current) {
+        clearTimeout(triggerCallTimeoutRef.current);
+        triggerCallTimeoutRef.current = null;
+      }
       setActiveCall(prev => {
         if (!prev) return { phoneNumber: data.phoneNumber, name: 'Lead', status: data.status, duration: 0 };
         return { ...prev, status: data.status };
@@ -167,6 +181,10 @@ function App() {
     });
 
     newSocket.on('call-state-error', (data) => {
+      if (triggerCallTimeoutRef.current) {
+        clearTimeout(triggerCallTimeoutRef.current);
+        triggerCallTimeoutRef.current = null;
+      }
       alert(data.message);
       setActiveCall(null);
       stopTimer();
@@ -187,7 +205,7 @@ function App() {
         return updated;
       });
       if (data.status === 'Completed') {
-        fetchLogs();
+        debouncedFetchLogs();
       }
     });
 
@@ -453,6 +471,17 @@ function App() {
   const triggerCall = async (number, name = 'Lead') => {
     if (!number || !socket) return;
     
+    if (triggerCallTimeoutRef.current) clearTimeout(triggerCallTimeoutRef.current);
+    triggerCallTimeoutRef.current = setTimeout(() => {
+      setActiveCall(prev => {
+        if (prev && prev.phoneNumber === number && prev.status === 'Triggered') {
+          alert("Mobile device did not respond to the call trigger. Please ensure the app is open on the executive's phone.");
+          return null;
+        }
+        return prev;
+      });
+    }, 15000);
+
     socket.emit('trigger-call', {
       empId: user.empId,
       phoneNumber: number,
