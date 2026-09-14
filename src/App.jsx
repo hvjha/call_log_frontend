@@ -126,7 +126,7 @@ function App() {
       const parsed = JSON.parse(savedUser);
       setUser(parsed);
       if (parsed.role === 'Admin') {
-        setSelectedMember('');
+        setSelectedMember('All');
       } else {
         setSelectedMember('All');
       }
@@ -381,19 +381,15 @@ function App() {
 
   const fetchLogs = async () => {
     if (!user) return;
-    if (user.role === 'Admin' && !selectedMember) {
-      setLogs([]);
-      return;
-    }
     try {
       const { startDate, endDate } = getDateRangeParams();
       const targetEmpIds = user.role === 'Executive' 
         ? [user.empId] 
-        : (selectedMember === 'All' ? [user.empId] : [selectedMember]);
+        : (selectedMember === 'All' || !selectedMember ? [user.empId] : [selectedMember]);
       
       let includeSubs = false;
       if (user.role !== 'Executive') {
-        if (selectedMember === 'All') {
+        if (selectedMember === 'All' || !selectedMember) {
           includeSubs = true;
         } else {
           const selectedUser = allUsers.find(u => String(u.empId) === String(selectedMember));
@@ -437,7 +433,7 @@ function App() {
         };
         setUser(loggedUser);
         if (loggedUser.role === 'Admin') {
-          setSelectedMember('');
+          setSelectedMember('All');
         } else {
           setSelectedMember('All');
         }
@@ -1696,19 +1692,19 @@ function App() {
                     {interestedList.map(item => (
                       <div 
                         key={item.id} 
-                        style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', border: '1px solid var(--border-color)', minWidth: '220px' }}
+                        onClick={() => fetchContactHistory(item.number)}
+                        style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', border: '1px solid var(--border-color)', minWidth: '220px', cursor: 'pointer' }}
+                        title="Click to view history"
                       >
                         <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || 'Unnamed'}</div>
                         <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                           <span 
-                            onClick={() => fetchContactHistory(item.number)} 
-                            style={{ cursor: 'pointer', textDecoration: 'underline', color: '#60a5fa' }}
-                            title="Click to view history"
+                            style={{ textDecoration: 'underline', color: '#60a5fa' }}
                           >
                             📞 {item.number}
                           </span>
                           <button 
-                            onClick={() => fetchContactHistory(item.number)}
+                            onClick={(e) => { e.stopPropagation(); fetchContactHistory(item.number); }}
                             style={{ background: 'rgba(96, 165, 250, 0.15)', border: '1px solid #60a5fa', color: '#60a5fa', fontSize: '11px', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
                             title="Click to view history"
                           >
@@ -1730,19 +1726,19 @@ function App() {
                     {followUpList.map(item => (
                       <div 
                         key={item.id} 
-                        style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', border: '1px solid var(--border-color)', minWidth: '220px' }}
+                        onClick={() => fetchContactHistory(item.number)}
+                        style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', border: '1px solid var(--border-color)', minWidth: '220px', cursor: 'pointer' }}
+                        title="Click to view history"
                       >
                         <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || 'Unnamed'}</div>
                         <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                           <span 
-                            onClick={() => fetchContactHistory(item.number)} 
-                            style={{ cursor: 'pointer', textDecoration: 'underline', color: '#60a5fa' }}
-                            title="Click to view history"
+                            style={{ textDecoration: 'underline', color: '#60a5fa' }}
                           >
                             📞 {item.number}
                           </span>
                           <button 
-                            onClick={() => fetchContactHistory(item.number)}
+                            onClick={(e) => { e.stopPropagation(); fetchContactHistory(item.number); }}
                             style={{ background: 'rgba(96, 165, 250, 0.15)', border: '1px solid #60a5fa', color: '#60a5fa', fontSize: '11px', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
                             title="Click to view history"
                           >
@@ -1764,19 +1760,19 @@ function App() {
                     {prospectList.map(item => (
                       <div 
                         key={item.id} 
-                        style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', border: '1px solid var(--border-color)', minWidth: '220px' }}
+                        onClick={() => fetchContactHistory(item.number)}
+                        style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', border: '1px solid var(--border-color)', minWidth: '220px', cursor: 'pointer' }}
+                        title="Click to view history"
                       >
                         <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || 'Unnamed'}</div>
                         <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                           <span 
-                            onClick={() => fetchContactHistory(item.number)} 
-                            style={{ cursor: 'pointer', textDecoration: 'underline', color: '#60a5fa' }}
-                            title="Click to view history"
+                            style={{ textDecoration: 'underline', color: '#60a5fa' }}
                           >
                             📞 {item.number}
                           </span>
                           <button 
-                            onClick={() => fetchContactHistory(item.number)}
+                            onClick={(e) => { e.stopPropagation(); fetchContactHistory(item.number); }}
                             style={{ background: 'rgba(96, 165, 250, 0.15)', border: '1px solid #60a5fa', color: '#60a5fa', fontSize: '11px', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
                             title="Click to view history"
                           >
