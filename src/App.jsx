@@ -859,11 +859,18 @@ function App() {
   const filteredLogs = latestLogsOnly.filter(log => {
     const query = searchQuery.trim().toLowerCase();
     const matchesSearch = query === '' || 
-      log.number.includes(query) ||
+      (log.number && log.number.toLowerCase().includes(query)) ||
       (log.name && log.name.toLowerCase().includes(query)) ||
+      (log.contactName && log.contactName.toLowerCase().includes(query)) ||
+      (log.companyName && log.companyName.toLowerCase().includes(query)) ||
+      (log.address && log.address.toLowerCase().includes(query)) ||
+      (log.email && log.email.toLowerCase().includes(query)) ||
       (log.syncedBy && log.syncedBy.toLowerCase().includes(query)) ||
       (log.description && log.description.toLowerCase().includes(query)) ||
-      (log.status && log.status.toLowerCase().includes(query));
+      (log.status && log.status.toLowerCase().includes(query)) ||
+      (log.category && log.category.toLowerCase().includes(query)) ||
+      (log.format && log.format.toLowerCase().includes(query)) ||
+      (log.followUpDate && log.followUpDate.toLowerCase().includes(query));
 
     const matchesCategory = selectedCategory === 'All' || log.category === selectedCategory;
 
