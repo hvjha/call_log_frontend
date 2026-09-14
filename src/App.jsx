@@ -64,6 +64,7 @@ function App() {
   const [address, setAddress] = useState('');
   const [email, setEmail] = useState('');
   const [callFormat, setCallFormat] = useState('Select Format');
+  const [followUpDate, setFollowUpDate] = useState('');
 
   // Admin/Manager States
   const [teamMembers, setTeamMembers] = useState([]);
@@ -499,6 +500,7 @@ function App() {
     setAddress('');
     setEmail('');
     setCallFormat('Select Format');
+    setFollowUpDate('');
 
     try {
       const res = await fetch(`${API_BASE}/contacts/details/${number}`);
@@ -550,6 +552,7 @@ function App() {
       address: address,
       email: email,
       format: callFormat,
+      followUpDate: followUpDate,
       isSaved: true
     };
 
@@ -1531,6 +1534,20 @@ function App() {
                           </div>
                         )}
 
+                        {/* FOLLOW UP DATE: SHOW ONLY WHEN STATUS IS FOLLOW UP */}
+                        {callOutcome === 'Follow Up' && (
+                          <div className="form-group" style={{ margin: '15px 0' }}>
+                            <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', color: '#fbbf24' }}>📅 Follow Up Date</label>
+                            <input 
+                              type="date" 
+                              className="form-input" 
+                              value={followUpDate} 
+                              onChange={(e) => setFollowUpDate(e.target.value)} 
+                              style={{ width: '100%', background: 'var(--bg-secondary)', color: 'white', border: '1px solid #f59e0b', padding: '10px', borderRadius: '6px' }}
+                            />
+                          </div>
+                        )}
+
                         <div className="form-group">
                           <textarea 
                             className="form-input" 
@@ -1789,6 +1806,12 @@ function App() {
                           <span>📞</span>
                           <span style={{ textDecoration: 'underline' }}>{item.number}</span>
                         </div>
+                        {item.followUpDate && (
+                          <div style={{ fontSize: '11px', color: '#fbbf24', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span>📅</span>
+                            <span>Follow Up Date: {item.followUpDate}</span>
+                          </div>
+                        )}
                       </div>
                     ))}
                     {followUpList.length === 0 && <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '20px' }}>No records.</div>}
@@ -2448,6 +2471,7 @@ function App() {
                     <div><strong>Format:</strong> {hLog.format || '-'}</div>
                     <div><strong>Company:</strong> {hLog.companyName || '-'}</div>
                     <div><strong>Duration:</strong> {hLog.duration}s</div>
+                    {hLog.followUpDate && <div style={{ color: '#fbbf24', gridColumn: 'span 2' }}><strong>📅 Follow-Up Date:</strong> {hLog.followUpDate}</div>}
                   </div>
                   <div style={{ fontSize: '13px', color: '#ccc' }}>
                     <strong>Note:</strong> {hLog.description || '-'}
