@@ -522,6 +522,11 @@ function App() {
   const submitCallOutcome = async () => {
     if (!activeCall || isSubmitting) return;
 
+    if (callOutcome === 'Follow Up' && !followUpDate) {
+      alert('Please select a Next Follow-Up Date before syncing!');
+      return;
+    }
+
     setIsSubmitting(true);
 
     const isUnconnected = callOutcome === 'Busy' || callOutcome === 'No Answer' || activeCall.status === 'Triggered' || activeCall.status === 'Dialing' || activeCall.status === 'Ringing';
@@ -591,6 +596,10 @@ function App() {
 
   const handleCallOutcomeClick = (outcome) => {
     setCallOutcome(outcome);
+    if (outcome === 'Follow Up' && !followUpDate) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      setFollowUpDate(todayStr);
+    }
     if (outcome === 'Busy' || outcome === 'Not Answering') {
       autoSubmitUnconnected(outcome);
     }
