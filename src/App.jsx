@@ -1693,23 +1693,45 @@ function App() {
                       <div 
                         key={item.id} 
                         onClick={() => fetchContactHistory(item.number)}
-                        style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', border: '1px solid var(--border-color)', minWidth: '220px', cursor: 'pointer' }}
-                        title="Click to view history"
+                        style={{
+                          background: 'rgba(255,255,255,0.03)',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          fontSize: '13px',
+                          border: '1px solid var(--border-color)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px'
+                        }}
+                        title="Click to view full call history"
                       >
-                        <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || 'Unnamed'}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                          <span 
-                            style={{ textDecoration: 'underline', color: '#60a5fa' }}
-                          >
-                            📞 {item.number}
-                          </span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '160px' }}>
+                            {item.name || 'Unnamed Lead'}
+                          </div>
                           <button 
                             onClick={(e) => { e.stopPropagation(); fetchContactHistory(item.number); }}
-                            style={{ background: 'rgba(96, 165, 250, 0.15)', border: '1px solid #60a5fa', color: '#60a5fa', fontSize: '11px', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                            style={{
+                              background: '#3b82f6',
+                              border: 'none',
+                              color: '#ffffff',
+                              fontSize: '11px',
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontWeight: 'bold',
+                              whiteSpace: 'nowrap',
+                              boxShadow: '0 2px 5px rgba(59,130,246,0.3)'
+                            }}
                             title="Click to view history"
                           >
                             📜 History
                           </button>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#60a5fa', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span>📞</span>
+                          <span style={{ textDecoration: 'underline' }}>{item.number}</span>
                         </div>
                       </div>
                     ))}
@@ -1727,23 +1749,45 @@ function App() {
                       <div 
                         key={item.id} 
                         onClick={() => fetchContactHistory(item.number)}
-                        style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', border: '1px solid var(--border-color)', minWidth: '220px', cursor: 'pointer' }}
-                        title="Click to view history"
+                        style={{
+                          background: 'rgba(255,255,255,0.03)',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          fontSize: '13px',
+                          border: '1px solid var(--border-color)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px'
+                        }}
+                        title="Click to view full call history"
                       >
-                        <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || 'Unnamed'}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                          <span 
-                            style={{ textDecoration: 'underline', color: '#60a5fa' }}
-                          >
-                            📞 {item.number}
-                          </span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '160px' }}>
+                            {item.name || 'Unnamed Lead'}
+                          </div>
                           <button 
                             onClick={(e) => { e.stopPropagation(); fetchContactHistory(item.number); }}
-                            style={{ background: 'rgba(96, 165, 250, 0.15)', border: '1px solid #60a5fa', color: '#60a5fa', fontSize: '11px', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                            style={{
+                              background: '#3b82f6',
+                              border: 'none',
+                              color: '#ffffff',
+                              fontSize: '11px',
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontWeight: 'bold',
+                              whiteSpace: 'nowrap',
+                              boxShadow: '0 2px 5px rgba(59,130,246,0.3)'
+                            }}
                             title="Click to view history"
                           >
                             📜 History
                           </button>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#60a5fa', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span>📞</span>
+                          <span style={{ textDecoration: 'underline' }}>{item.number}</span>
                         </div>
                       </div>
                     ))}
@@ -1761,23 +1805,45 @@ function App() {
                       <div 
                         key={item.id} 
                         onClick={() => fetchContactHistory(item.number)}
-                        style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', border: '1px solid var(--border-color)', minWidth: '220px', cursor: 'pointer' }}
-                        title="Click to view history"
+                        style={{
+                          background: 'rgba(255,255,255,0.03)',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          fontSize: '13px',
+                          border: '1px solid var(--border-color)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px'
+                        }}
+                        title="Click to view full call history"
                       >
-                        <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || 'Unnamed'}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                          <span 
-                            style={{ textDecoration: 'underline', color: '#60a5fa' }}
-                          >
-                            📞 {item.number}
-                          </span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '160px' }}>
+                            {item.name || 'Unnamed Lead'}
+                          </div>
                           <button 
                             onClick={(e) => { e.stopPropagation(); fetchContactHistory(item.number); }}
-                            style={{ background: 'rgba(96, 165, 250, 0.15)', border: '1px solid #60a5fa', color: '#60a5fa', fontSize: '11px', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                            style={{
+                              background: '#3b82f6',
+                              border: 'none',
+                              color: '#ffffff',
+                              fontSize: '11px',
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontWeight: 'bold',
+                              whiteSpace: 'nowrap',
+                              boxShadow: '0 2px 5px rgba(59,130,246,0.3)'
+                            }}
                             title="Click to view history"
                           >
                             📜 History
                           </button>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#60a5fa', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span>📞</span>
+                          <span style={{ textDecoration: 'underline' }}>{item.number}</span>
                         </div>
                       </div>
                     ))}
