@@ -913,3 +913,20 @@
   flex-direction: column;
   gap: 8px;
 }
+
+/* Hover History Popover animation */
+.hover-history-popover {
+  animation: fadeInPopover 0.15s ease-out forwards;
+}
+
+@keyframes fadeInPopover {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+

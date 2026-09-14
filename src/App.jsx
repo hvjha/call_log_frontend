@@ -117,6 +117,46 @@ function App() {
   const [transferringLead, setTransferringLead] = useState(null);
   const [transferToEmpId, setTransferToEmpId] = useState('');
 
+  const [hoveredHistory, setHoveredHistory] = useState(null); // { item, logs: [], loading: false, pos: { top, left } }
+
+  const handleLeadMouseEnter = (e, item) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pos = {
+      top: Math.max(10, rect.top + window.scrollY - 20),
+      left: Math.max(10, rect.left - 330)
+    };
+
+    setHoveredHistory({
+      item,
+      logs: [],
+      loading: true,
+      pos
+    });
+
+    fetch(`${API_BASE}/contacts/history/${item.number}`)
+      .then(res => res.json())
+      .then(data => {
+        setHoveredHistory(prev => {
+          if (prev && prev.item.number === item.number) {
+            return { ...prev, logs: data, loading: false };
+          }
+          return prev;
+        });
+      })
+      .catch(() => {
+        setHoveredHistory(prev => {
+          if (prev && prev.item.number === item.number) {
+            return { ...prev, loading: false };
+          }
+          return prev;
+        });
+      });
+  };
+
+  const handleLeadMouseLeave = () => {
+    setHoveredHistory(null);
+  };
+
   const timerRef = useRef(null);
 
   // Read saved user session from localStorage on startup
@@ -1698,9 +1738,20 @@ function App() {
                         key={item.id} 
                         style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', border: '1px solid var(--border-color)', minWidth: '220px' }}
                         onClick={() => { if (user.role === 'Executive') triggerCall(item.number, item.name); }}
+                        onMouseEnter={(e) => handleLeadMouseEnter(e, item)}
+                        onMouseLeave={handleLeadMouseLeave}
                       >
                         <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || 'Unnamed'}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>📞 {item.number}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
+                          <span>📞 {item.number}</span>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); fetchContactHistory(item.number); }}
+                            style={{ background: 'transparent', border: 'none', color: '#60a5fa', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' }}
+                            title="Click to view history"
+                          >
+                            History
+                          </button>
+                        </div>
                       </div>
                     ))}
                     {interestedList.length === 0 && <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '20px' }}>No records.</div>}
@@ -1718,9 +1769,20 @@ function App() {
                         key={item.id} 
                         style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', border: '1px solid var(--border-color)', minWidth: '220px' }}
                         onClick={() => { if (user.role === 'Executive') triggerCall(item.number, item.name); }}
+                        onMouseEnter={(e) => handleLeadMouseEnter(e, item)}
+                        onMouseLeave={handleLeadMouseLeave}
                       >
                         <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || 'Unnamed'}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>📞 {item.number}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
+                          <span>📞 {item.number}</span>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); fetchContactHistory(item.number); }}
+                            style={{ background: 'transparent', border: 'none', color: '#60a5fa', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' }}
+                            title="Click to view history"
+                          >
+                            History
+                          </button>
+                        </div>
                       </div>
                     ))}
                     {followUpList.length === 0 && <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '20px' }}>No records.</div>}
@@ -1738,9 +1800,20 @@ function App() {
                         key={item.id} 
                         style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', border: '1px solid var(--border-color)', minWidth: '220px' }}
                         onClick={() => { if (user.role === 'Executive') triggerCall(item.number, item.name); }}
+                        onMouseEnter={(e) => handleLeadMouseEnter(e, item)}
+                        onMouseLeave={handleLeadMouseLeave}
                       >
                         <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name || 'Unnamed'}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>📞 {item.number}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
+                          <span>📞 {item.number}</span>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); fetchContactHistory(item.number); }}
+                            style={{ background: 'transparent', border: 'none', color: '#60a5fa', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' }}
+                            title="Click to view history"
+                          >
+                            History
+                          </button>
+                        </div>
                       </div>
                     ))}
                     {prospectList.length === 0 && <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '20px' }}>No records.</div>}
@@ -2300,6 +2373,88 @@ function App() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* HOVER HISTORY FLOATING CARD */}
+      {hoveredHistory && (
+        <div 
+          className="hover-history-popover"
+          style={{
+            position: 'fixed',
+            top: `${hoveredHistory.pos.top}px`,
+            left: `${hoveredHistory.pos.left}px`,
+            width: '320px',
+            maxHeight: '380px',
+            zIndex: 9999,
+            background: 'var(--bg-secondary, #1e293b)',
+            border: '1px solid #60a5fa',
+            borderRadius: '10px',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.6)',
+            padding: '14px',
+            pointerEvents: 'auto',
+            overflowY: 'auto'
+          }}
+          onMouseEnter={() => {}}
+          onMouseLeave={handleLeadMouseLeave}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
+            <strong style={{ fontSize: '13px', color: '#fff' }}>📜 History Preview: {hoveredHistory.item.name || 'Unnamed'}</strong>
+            <span style={{ fontSize: '11px', color: '#60a5fa', fontWeight: 'bold' }}>{hoveredHistory.item.number}</span>
+          </div>
+
+          {hoveredHistory.loading ? (
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '12px' }}>
+              Fetching history logs...
+            </div>
+          ) : hoveredHistory.logs && hoveredHistory.logs.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {hoveredHistory.logs.slice(0, 4).map(log => (
+                <div key={log.id} style={{ background: 'rgba(255,255,255,0.04)', padding: '8px 10px', borderRadius: '6px', fontSize: '11px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span style={{ color: '#aaa', fontSize: '10px' }}>{new Date(log.date).toLocaleString()}</span>
+                    <span className={`badge-outcome ${log.status?.toLowerCase().replace(' ', '-') || 'busy'}`} style={{ fontSize: '9px', padding: '1px 5px' }}>
+                      {log.status || 'No Status'}
+                    </span>
+                  </div>
+                  <div style={{ color: '#ddd' }}><strong>Caller:</strong> {log.syncedBy || '-'}</div>
+                  {log.description && <div style={{ color: '#94a3b8', marginTop: '3px', fontStyle: 'italic' }}>"{log.description}"</div>}
+                </div>
+              ))}
+              {hoveredHistory.logs.length > 4 && (
+                <div style={{ fontSize: '10px', textAlign: 'center', color: '#60a5fa', fontWeight: 'bold' }}>
+                  +{hoveredHistory.logs.length - 4} more logs in full history
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '12px' }}>
+              No recorded call history found.
+            </div>
+          )}
+
+          <button 
+            onClick={() => {
+              const num = hoveredHistory.item.number;
+              setHoveredHistory(null);
+              fetchContactHistory(num);
+            }}
+            style={{
+              width: '100%',
+              marginTop: '10px',
+              padding: '7px',
+              fontSize: '11px',
+              background: 'rgba(96, 165, 250, 0.15)',
+              border: '1px solid #60a5fa',
+              color: '#60a5fa',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              transition: 'background 0.2s'
+            }}
+          >
+            View Full History Modal ↗
+          </button>
         </div>
       )}
 
