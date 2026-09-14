@@ -290,8 +290,8 @@ function App() {
   // Refetch logs when filters change
   useEffect(() => {
     if (!user) return;
-    fetchLogs();
-  }, [user, dateFilter, selectedDate, selectedMember]);
+    debouncedFetchLogs();
+  }, [user, dateFilter, selectedDate, selectedMember, searchQuery]);
 
   const startTimer = () => {
     stopTimer();
@@ -383,7 +383,8 @@ function App() {
   const fetchLogs = async () => {
     if (!user) return;
     try {
-      const { startDate, endDate } = getDateRangeParams();
+      const hasSearch = searchQuery.trim().length > 0;
+      const { startDate, endDate } = hasSearch ? { startDate: null, endDate: null } : getDateRangeParams();
       const targetEmpIds = user.role === 'Executive' 
         ? [user.empId] 
         : (selectedMember === 'All' || !selectedMember ? [user.empId] : [selectedMember]);
