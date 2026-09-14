@@ -118,13 +118,35 @@ function App() {
   const [transferToEmpId, setTransferToEmpId] = useState('');
 
   const [hoveredHistory, setHoveredHistory] = useState(null); // { item, logs: [], loading: false, pos: { top, left } }
+  const hoverLeaveTimerRef = useRef(null);
 
   const handleLeadMouseEnter = (e, item) => {
+    if (hoverLeaveTimerRef.current) {
+      clearTimeout(hoverLeaveTimerRef.current);
+      hoverLeaveTimerRef.current = null;
+    }
+
     const rect = e.currentTarget.getBoundingClientRect();
-    const pos = {
-      top: Math.max(10, rect.top + window.scrollY - 20),
-      left: Math.max(10, rect.left - 330)
-    };
+    const popoverWidth = 330;
+    const popoverHeight = 360;
+    
+    // Viewport-based vertical positioning for position: fixed
+    let top = rect.top;
+    if (top + popoverHeight > window.innerHeight) {
+      top = Math.max(10, window.innerHeight - popoverHeight - 10);
+    }
+    top = Math.max(10, top);
+
+    // Viewport-based horizontal positioning (left of list item if space permits, else right/clamped)
+    let left;
+    if (rect.left >= popoverWidth + 15) {
+      left = rect.left - popoverWidth - 10;
+    } else {
+      left = Math.min(window.innerWidth - popoverWidth - 10, rect.right + 10);
+    }
+    left = Math.max(10, left);
+
+    const pos = { top, left };
 
     setHoveredHistory({
       item,
@@ -133,12 +155,12 @@ function App() {
       pos
     });
 
-    fetch(`${API_BASE}/contacts/history/${item.number}`)
+    fetch(`${API_BASE}/contacts/history/${encodeURIComponent(item.number)}`)
       .then(res => res.json())
       .then(data => {
         setHoveredHistory(prev => {
           if (prev && prev.item.number === item.number) {
-            return { ...prev, logs: data, loading: false };
+            return { ...prev, logs: Array.isArray(data) ? data : [], loading: false };
           }
           return prev;
         });
@@ -154,7 +176,17 @@ function App() {
   };
 
   const handleLeadMouseLeave = () => {
-    setHoveredHistory(null);
+    if (hoverLeaveTimerRef.current) clearTimeout(hoverLeaveTimerRef.current);
+    hoverLeaveTimerRef.current = setTimeout(() => {
+      setHoveredHistory(null);
+    }, 250);
+  };
+
+  const handlePopoverMouseEnter = () => {
+    if (hoverLeaveTimerRef.current) {
+      clearTimeout(hoverLeaveTimerRef.current);
+      hoverLeaveTimerRef.current = null;
+    }
   };
 
   const timerRef = useRef(null);
@@ -2384,18 +2416,18 @@ function App() {
             position: 'fixed',
             top: `${hoveredHistory.pos.top}px`,
             left: `${hoveredHistory.pos.left}px`,
-            width: '320px',
-            maxHeight: '380px',
-            zIndex: 9999,
+            width: '330px',
+            maxHeight: '400px',
+            zIndex: 999999,
             background: 'var(--bg-secondary, #1e293b)',
             border: '1px solid #60a5fa',
             borderRadius: '10px',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.6)',
+            boxShadow: '0 12px 35px rgba(0,0,0,0.85)',
             padding: '14px',
             pointerEvents: 'auto',
             overflowY: 'auto'
           }}
-          onMouseEnter={() => {}}
+          onMouseEnter={handlePopoverMouseEnter}
           onMouseLeave={handleLeadMouseLeave}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
