@@ -1553,14 +1553,18 @@ function App() {
 
                         {/* FOLLOW UP DATE: SHOW ONLY WHEN STATUS IS FOLLOW UP */}
                         {callOutcome === 'Follow Up' && (
-                          <div className="form-group" style={{ margin: '15px 0' }}>
-                            <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', color: '#fbbf24' }}>📅 Follow Up Date</label>
+                          <div className="form-group" style={{ margin: '15px 0', background: 'rgba(245, 158, 11, 0.1)', padding: '12px', borderRadius: '8px', border: '1px solid #f59e0b' }}>
+                            <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', color: '#fbbf24', fontSize: '13px' }}>
+                              📅 Next Follow Up Date (Click to Pick Date):
+                            </label>
                             <input 
                               type="date" 
                               className="form-input" 
                               value={followUpDate} 
+                              onClick={(e) => { try { e.target.showPicker && e.target.showPicker(); } catch(err){} }}
                               onChange={(e) => setFollowUpDate(e.target.value)} 
-                              style={{ width: '100%', background: 'var(--bg-secondary)', color: 'white', border: '1px solid #f59e0b', padding: '10px', borderRadius: '6px' }}
+                              style={{ width: '100%', background: '#1e293b', color: '#fbbf24', border: '2px solid #f59e0b', padding: '12px', borderRadius: '6px', fontSize: '15px', fontWeight: 'bold', cursor: 'pointer' }}
+                              required
                             />
                           </div>
                         )}
