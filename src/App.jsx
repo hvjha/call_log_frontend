@@ -37,7 +37,7 @@ function App() {
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
   const [socket, setSocket] = useState(null);
-  
+
   // Shared States
   const [logs, setLogs] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -109,7 +109,7 @@ function App() {
       console.error('Error fetching contact history:', err);
     }
   };
-  
+
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assignForm, setAssignForm] = useState({
     numbersText: '',
@@ -387,10 +387,10 @@ function App() {
     try {
       const hasSearch = searchQuery.trim().length > 0;
       const { startDate, endDate } = hasSearch ? { startDate: null, endDate: null } : getDateRangeParams();
-      const targetEmpIds = user.role === 'Executive' 
-        ? [user.empId] 
+      const targetEmpIds = user.role === 'Executive'
+        ? [user.empId]
         : (selectedMember === 'All' || !selectedMember ? [user.empId] : [selectedMember]);
-      
+
       let includeSubs = false;
       if (user.role !== 'Executive') {
         if (selectedMember === 'All' || !selectedMember) {
@@ -408,7 +408,7 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targetEmpIds, startDate, endDate, includeSubordinates: includeSubs })
       });
-      
+
       if (res.ok) {
         const data = await res.json();
         setLogs(data);
@@ -470,7 +470,7 @@ function App() {
 
   const triggerCall = async (number, name = 'Lead') => {
     if (!number || !socket) return;
-    
+
     if (triggerCallTimeoutRef.current) clearTimeout(triggerCallTimeoutRef.current);
     triggerCallTimeoutRef.current = setTimeout(() => {
       setActiveCall(prev => {
@@ -532,7 +532,7 @@ function App() {
     setIsSubmitting(true);
 
     const isUnconnected = callOutcome === 'Busy' || callOutcome === 'No Answer' || activeCall.status === 'Triggered' || activeCall.status === 'Dialing' || activeCall.status === 'Ringing';
-    
+
     let finalDuration = 0;
     if (!isUnconnected) {
       if (callStartTime) {
@@ -710,8 +710,8 @@ function App() {
     const payload = {
       ...userForm,
       reportsTo: editingUser ? userForm.reportsTo : (
-        user.role === 'Manager' && userForm.role === 'TL' ? user.empId : 
-        user.role === 'TL' ? user.empId : userForm.reportsTo || user.empId
+        user.role === 'Manager' && userForm.role === 'TL' ? user.empId :
+          user.role === 'TL' ? user.empId : userForm.reportsTo || user.empId
       )
     };
 
@@ -815,9 +815,9 @@ function App() {
       (log.description || '').replace(/"/g, '""').replace(/\r?\n/g, ' ')
     ]);
 
-    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF"
       + [headers.join(","), ...rows.map(e => e.map(val => `"${val}"`).join(","))].join("\n");
-    
+
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -869,7 +869,7 @@ function App() {
   // CLIENT SIDE FILTERING LOGS
   const filteredLogs = latestLogsOnly.filter(log => {
     const query = searchQuery.trim().toLowerCase();
-    const matchesSearch = query === '' || 
+    const matchesSearch = query === '' ||
       (log.number && log.number.toLowerCase().includes(query)) ||
       (log.name && log.name.toLowerCase().includes(query)) ||
       (log.contactName && log.contactName.toLowerCase().includes(query)) ||
@@ -1024,7 +1024,7 @@ function App() {
     const label = `${i > 12 ? i - 12 : i}:00 ${i >= 12 ? 'PM' : 'AM'}`;
     hourlyBins[label] = 0;
   }
-  
+
   filteredLogs.forEach(log => {
     const date = new Date(log.date);
     const hour = date.getHours();
@@ -1088,10 +1088,10 @@ function App() {
           <form onSubmit={handleLogin}>
             <div className="form-group">
               <label className="form-label" htmlFor="username">Employee ID</label>
-              <input 
-                type="text" 
-                id="username" 
-                className="form-input" 
+              <input
+                type="text"
+                id="username"
+                className="form-input"
                 placeholder="Enter Emp ID (e.g. admin or numeric ID)"
                 value={loginForm.username}
                 onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
@@ -1100,10 +1100,10 @@ function App() {
             </div>
             <div className="form-group">
               <label className="form-label" htmlFor="password">Password</label>
-              <input 
-                type="password" 
-                id="password" 
-                className="form-input" 
+              <input
+                type="password"
+                id="password"
+                className="form-input"
                 placeholder="••••••••"
                 value={loginForm.password}
                 onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
@@ -1126,22 +1126,22 @@ function App() {
         <div className="user-profile">
           {user.role !== 'Executive' && (
             <div style={{ display: 'flex', gap: '10px', marginRight: '15px' }}>
-              <button 
-                onClick={() => setActiveTab('dashboard')} 
+              <button
+                onClick={() => setActiveTab('dashboard')}
                 className="btn-logout"
                 style={activeTab === 'dashboard' ? { background: 'var(--accent-gradient)', borderColor: 'transparent', color: 'white' } : {}}
               >
                 📊 Dashboard
               </button>
-              <button 
-                onClick={() => setActiveTab('team')} 
+              <button
+                onClick={() => setActiveTab('team')}
                 className="btn-logout"
                 style={activeTab === 'team' ? { background: 'var(--accent-gradient)', borderColor: 'transparent', color: 'white' } : {}}
               >
                 👥 Team
               </button>
-              <button 
-                onClick={() => setActiveTab('leads')} 
+              <button
+                onClick={() => setActiveTab('leads')}
                 className="btn-logout"
                 style={activeTab === 'leads' ? { background: 'var(--accent-gradient)', borderColor: 'transparent', color: 'white' } : {}}
               >
@@ -1228,9 +1228,9 @@ function App() {
           )}
 
           <div style={{ flex: 1, minWidth: '200px' }}>
-            <input 
-              type="text" 
-              placeholder="Search logs/number/notes/outcome..." 
+            <input
+              type="text"
+              placeholder="Search logs/number/notes/outcome..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="filter-input"
@@ -1239,14 +1239,14 @@ function App() {
           </div>
 
           {user.role !== 'Executive' && (
-            <button 
-              onClick={() => setShowCharts(!showCharts)} 
-              className="btn-clear" 
-              style={{ 
-                background: showCharts ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.15)', 
-                borderColor: showCharts ? '#10B981' : 'var(--info)', 
-                color: showCharts ? '#10B981' : 'var(--info)', 
-                marginRight: '8px' 
+            <button
+              onClick={() => setShowCharts(!showCharts)}
+              className="btn-clear"
+              style={{
+                background: showCharts ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.15)',
+                borderColor: showCharts ? '#10B981' : 'var(--info)',
+                color: showCharts ? '#10B981' : 'var(--info)',
+                marginRight: '8px'
               }}
             >
               {showCharts ? '📊 Hide Analytics' : '📊 Show Analytics'}
@@ -1263,7 +1263,7 @@ function App() {
 
       {/* DASHBOARD CONTENT CONTAINER */}
       <div className="main-content" style={{ maxWidth: '100%', width: '100%', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        
+
         {activeTab === 'dashboard' ? (
           <>
             {/* TOP ROW: DIALER SECTION + STATS ROW ALIGNED IN THE SAME LINE SPANNING FULL WIDTH */}
@@ -1272,9 +1272,9 @@ function App() {
               <div className="stat-card" style={{ padding: '20px', width: '320px', display: 'flex', flexDirection: 'column', justifyContent: 'center', flexShrink: 0 }}>
                 <h4 style={{ fontSize: '14px', marginBottom: '12px', fontWeight: 'bold' }}>Make a Call</h4>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                  <input 
-                    type="text" 
-                    placeholder="Enter phone number..." 
+                  <input
+                    type="text"
+                    placeholder="Enter phone number..."
                     value={manualPhone}
                     onChange={(e) => setManualPhone(e.target.value)}
                     style={{ flex: 1, background: 'var(--bg-primary)', color: 'white', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '4px', fontSize: '14px', outline: 'none' }}
@@ -1330,15 +1330,15 @@ function App() {
                 <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '20px', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   📈 Visual Performance Trends & Hourly Analytics
                 </h3>
-                
+
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
-                  
+
                   {/* Chart 1: Call Outcomes Comparison */}
                   <div style={{ background: 'var(--bg-primary)', padding: '20px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: '380px' }}>
                     <h4 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '15px', color: 'var(--text-secondary)' }}>📊 Overall Status Distribution</h4>
                     <div style={{ width: '100%', height: '280px', display: 'flex', justifyContent: 'center' }}>
-                      <Doughnut 
-                        data={doughnutData} 
+                      <Doughnut
+                        data={doughnutData}
                         options={{
                           responsive: true,
                           maintainAspectRatio: false,
@@ -1348,7 +1348,7 @@ function App() {
                               labels: { color: 'rgba(255,255,255,0.7)', font: { size: 11 } }
                             }
                           }
-                        }} 
+                        }}
                       />
                     </div>
                   </div>
@@ -1357,8 +1357,8 @@ function App() {
                   <div style={{ background: 'var(--bg-primary)', padding: '20px', borderRadius: '8px', border: '1px solid var(--border-color)', minHeight: '380px' }}>
                     <h4 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '15px', color: 'var(--text-secondary)' }}>🕒 Hourly Dialing Performance (9 AM - 6 PM)</h4>
                     <div style={{ height: '280px' }}>
-                      <Line 
-                        data={hourlyData} 
+                      <Line
+                        data={hourlyData}
                         options={{
                           responsive: true,
                           maintainAspectRatio: false,
@@ -1367,7 +1367,7 @@ function App() {
                             y: { grid: { color: 'rgba(255,255,255,0.08)' }, ticks: { color: 'rgba(255,255,255,0.6)' } },
                             x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.6)', font: { size: 10 } } }
                           }
-                        }} 
+                        }}
                       />
                     </div>
                   </div>
@@ -1376,8 +1376,8 @@ function App() {
                   <div style={{ background: 'var(--bg-primary)', padding: '20px', borderRadius: '8px', border: '1px solid var(--border-color)', minHeight: '380px' }}>
                     <h4 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '15px', color: 'var(--text-secondary)' }}>📅 Daily Call Volume (Last 7 Days)</h4>
                     <div style={{ height: '280px' }}>
-                      <Bar 
-                        data={dailyData} 
+                      <Bar
+                        data={dailyData}
                         options={{
                           responsive: true,
                           maintainAspectRatio: false,
@@ -1386,7 +1386,7 @@ function App() {
                             y: { grid: { color: 'rgba(255,255,255,0.08)' }, ticks: { color: 'rgba(255,255,255,0.6)' } },
                             x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.6)', font: { size: 10 } } }
                           }
-                        }} 
+                        }}
                       />
                     </div>
                   </div>
@@ -1397,15 +1397,15 @@ function App() {
 
             {/* BOTTOM ROW: 3-COLUMN GRID ALIGNED SIDE-BY-SIDE */}
             <div style={{ display: 'grid', gridTemplateColumns: '320px minmax(0, 1fr) 320px', gap: '20px', width: '100%' }}>
-              
+
               {/* COLUMN 1: LEFT SIDE - ASSIGNED LEADS */}
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <div className="stat-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', height: '1150px' }}>
                   <h4 style={{ fontSize: '14px', marginBottom: '12px', fontWeight: 'bold' }}>Assigned Leads ({leads.length})</h4>
                   <div className="leads-list" style={{ flex: 1, overflowY: 'auto' }}>
                     {leads.map(lead => (
-                      <div 
-                        key={lead.number} 
+                      <div
+                        key={lead.number}
                         className={`lead-item ${selectedLead?.number === lead.number ? 'active' : ''}`}
                         onClick={() => setSelectedLead(lead)}
                         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
@@ -1414,7 +1414,7 @@ function App() {
                           <div className="lead-name">{lead.name || 'Unnamed Lead'}</div>
                           <div className="lead-phone">
                             📞 {lead.number}
-                            <button 
+                            <button
                               onClick={(e) => { e.stopPropagation(); fetchContactHistory(lead.number); }}
                               style={{ marginLeft: '10px', background: 'transparent', border: 'none', color: '#60a5fa', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' }}
                             >
@@ -1423,7 +1423,7 @@ function App() {
                           </div>
                         </div>
                         {user.role !== 'Executive' && (
-                          <button 
+                          <button
                             onClick={(e) => handleRemoveLead(e, lead.number)}
                             className="btn-logout"
                             style={{ padding: '4px 8px', fontSize: '11px', borderColor: 'var(--danger)', color: 'var(--danger)', background: 'transparent' }}
@@ -1440,14 +1440,14 @@ function App() {
 
               {/* COLUMN 2: CENTER - ACTIVE CALL / HISTORY / HOURLY PERFORMANCE TABLE */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0 }}>
-                
+
                 {/* ACTIVE CALL HUD */}
                 {activeCall && (
                   <div className="call-hud">
                     <div className="hud-phone-icon">📞</div>
                     <div className="hud-name">{activeCall.name}</div>
                     <div className="hud-phone">{activeCall.phoneNumber}</div>
-                    
+
                     <div className="hud-state">
                       <div className="pulse-dot"></div>
                       {activeCall.status}...
@@ -1466,9 +1466,9 @@ function App() {
                         <div style={{ fontSize: '32px', fontWeight: 'bold', fontFamily: 'var(--font-display)', marginBottom: '15px' }}>
                           {formatDuration(callTimer)}
                         </div>
-                        <button 
-                          onClick={() => { stopTimer(); setActiveCall(prev => ({ ...prev, status: 'Completed' })); }} 
-                          className="btn-call" 
+                        <button
+                          onClick={() => { stopTimer(); setActiveCall(prev => ({ ...prev, status: 'Completed' })); }}
+                          className="btn-call"
                           style={{ background: 'var(--danger)', padding: '10px 20px', fontSize: '13px', borderRadius: '20px' }}
                         >
                           🛑 End Call & Log Outcome
@@ -1482,8 +1482,8 @@ function App() {
                         <h4 className="outcome-title">Call Outcome (Duration: {formatDuration(callTimer)})</h4>
                         <div className="outcome-options" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
                           {['Interested', 'Follow Up', 'Prospect', 'Not Interested', 'Busy', 'Not Answering'].map(outcome => (
-                            <button 
-                              key={outcome} 
+                            <button
+                              key={outcome}
                               className={`outcome-btn ${callOutcome === outcome ? 'active' : ''}`}
                               onClick={() => handleCallOutcomeClick(outcome)}
                             >
@@ -1496,51 +1496,51 @@ function App() {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '15px', marginBottom: '15px' }}>
                           <div className="form-group" style={{ margin: 0 }}>
                             <label className="form-label">Contact Name</label>
-                            <input 
-                              type="text" 
-                              className="form-input" 
-                              value={contactName} 
-                              onChange={(e) => setContactName(e.target.value)} 
-                              placeholder="Contact Name" 
+                            <input
+                              type="text"
+                              className="form-input"
+                              value={contactName}
+                              onChange={(e) => setContactName(e.target.value)}
+                              placeholder="Contact Name"
                             />
                           </div>
                           <div className="form-group" style={{ margin: 0 }}>
                             <label className="form-label">Company Name</label>
-                            <input 
-                              type="text" 
-                              className="form-input" 
-                              value={companyName} 
-                              onChange={(e) => setCompanyName(e.target.value)} 
-                              placeholder="Company Name" 
+                            <input
+                              type="text"
+                              className="form-input"
+                              value={companyName}
+                              onChange={(e) => setCompanyName(e.target.value)}
+                              placeholder="Company Name"
                             />
                           </div>
                           <div className="form-group" style={{ margin: 0 }}>
                             <label className="form-label">Address</label>
-                            <input 
-                              type="text" 
-                              className="form-input" 
-                              value={address} 
-                              onChange={(e) => setAddress(e.target.value)} 
-                              placeholder="Address" 
+                            <input
+                              type="text"
+                              className="form-input"
+                              value={address}
+                              onChange={(e) => setAddress(e.target.value)}
+                              placeholder="Address"
                             />
                           </div>
                           <div className="form-group" style={{ margin: 0 }}>
                             <label className="form-label">Email</label>
-                            <input 
-                              type="email" 
-                              className="form-input" 
-                              value={email} 
+                            <input
+                              type="email"
+                              className="form-input"
+                              value={email}
                               onChange={(e) => setEmail(e.target.value)}
-                              placeholder="Email" 
+                              placeholder="Email"
                             />
                           </div>
                         </div>
 
                         <div className="form-group" style={{ marginBottom: '15px' }}>
                           <label className="form-label">Select Format</label>
-                          <select 
-                            className="form-input" 
-                            value={callFormat} 
+                          <select
+                            className="form-input"
+                            value={callFormat}
                             onChange={(e) => setCallFormat(e.target.value)}
                             style={{ width: '100%', background: 'var(--bg-secondary)', color: 'white', border: '1px solid var(--border-color)', padding: '10px', borderRadius: '6px' }}
                           >
@@ -1567,34 +1567,30 @@ function App() {
 
                         {/* FOLLOW UP DATE: SHOW ONLY WHEN STATUS IS FOLLOW UP */}
                         {callOutcome === 'Follow Up' && (
-                          <div className="form-group" style={{ margin: '15px 0', background: 'rgba(245, 158, 11, 0.1)', padding: '12px', borderRadius: '8px', border: '1px solid #f59e0b' }}>
-                            <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', color: '#fbbf24', fontSize: '13px' }}>
-                              📅 Next Follow Up Date (Click to Pick Date):
-                            </label>
-                            <input 
-                              type="date" 
-                              className="form-input" 
-                              value={followUpDate} 
-                              onClick={(e) => { try { e.target.showPicker && e.target.showPicker(); } catch(err){} }}
-                              onChange={(e) => setFollowUpDate(e.target.value)} 
-                              style={{ width: '100%', background: '#1e293b', color: '#fbbf24', border: '2px solid #f59e0b', padding: '12px', borderRadius: '6px', fontSize: '15px', fontWeight: 'bold', cursor: 'pointer' }}
-                              required
+                          <div className="form-group" style={{ margin: '15px 0' }}>
+                            <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', color: '#fbbf24' }}>📅 Follow Up Date</label>
+                            <input
+                              type="date"
+                              className="form-input"
+                              value={followUpDate}
+                              onChange={(e) => setFollowUpDate(e.target.value)}
+                              style={{ width: '100%', background: 'var(--bg-secondary)', color: 'white', border: '1px solid #f59e0b', padding: '10px', borderRadius: '6px' }}
                             />
                           </div>
                         )}
 
                         <div className="form-group">
-                          <textarea 
-                            className="form-input" 
-                            rows="2" 
+                          <textarea
+                            className="form-input"
+                            rows="2"
                             placeholder="Remarks / Note about the call..."
                             value={callNotes}
                             onChange={(e) => setCallNotes(e.target.value)}
                           ></textarea>
                         </div>
-                        <button 
-                          onClick={submitCallOutcome} 
-                          className="btn-primary" 
+                        <button
+                          onClick={submitCallOutcome}
+                          className="btn-primary"
                           style={{ background: isSubmitting ? '#4b5563' : 'var(--success)', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}
                           disabled={isSubmitting}
                         >
@@ -1651,8 +1647,8 @@ function App() {
                             {user.role !== 'Executive' && <td>{log.syncedBy}</td>}
                             <td>{log.contactName || log.name || '-'}</td>
                             <td>
-                              <span 
-                                onClick={() => fetchContactHistory(log.number)} 
+                              <span
+                                onClick={() => fetchContactHistory(log.number)}
                                 style={{ cursor: 'pointer', textDecoration: 'underline', color: '#60a5fa' }}
                                 title="Click to view history"
                               >
@@ -1742,8 +1738,8 @@ function App() {
                   </h4>
                   <div className="right-column-list">
                     {interestedList.map(item => (
-                      <div 
-                        key={item.id} 
+                      <div
+                        key={item.id}
                         onClick={() => fetchContactHistory(item.number)}
                         style={{
                           background: 'rgba(255,255,255,0.03)',
@@ -1762,7 +1758,7 @@ function App() {
                           <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '160px' }}>
                             {item.name || 'Unnamed Lead'}
                           </div>
-                          <button 
+                          <button
                             onClick={(e) => { e.stopPropagation(); fetchContactHistory(item.number); }}
                             style={{
                               background: '#3b82f6',
@@ -1798,8 +1794,8 @@ function App() {
                   </h4>
                   <div className="right-column-list">
                     {followUpList.map(item => (
-                      <div 
-                        key={item.id} 
+                      <div
+                        key={item.id}
                         onClick={() => fetchContactHistory(item.number)}
                         style={{
                           background: 'rgba(255,255,255,0.03)',
@@ -1818,7 +1814,7 @@ function App() {
                           <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '160px' }}>
                             {item.name || 'Unnamed Lead'}
                           </div>
-                          <button 
+                          <button
                             onClick={(e) => { e.stopPropagation(); fetchContactHistory(item.number); }}
                             style={{
                               background: '#3b82f6',
@@ -1860,8 +1856,8 @@ function App() {
                   </h4>
                   <div className="right-column-list">
                     {prospectList.map(item => (
-                      <div 
-                        key={item.id} 
+                      <div
+                        key={item.id}
                         onClick={() => fetchContactHistory(item.number)}
                         style={{
                           background: 'rgba(255,255,255,0.03)',
@@ -1880,7 +1876,7 @@ function App() {
                           <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '160px' }}>
                             {item.name || 'Unnamed Lead'}
                           </div>
-                          <button 
+                          <button
                             onClick={(e) => { e.stopPropagation(); fetchContactHistory(item.number); }}
                             style={{
                               background: '#3b82f6',
@@ -1914,18 +1910,18 @@ function App() {
           </>
         ) : activeTab === 'team' ? (
           <div style={{ display: 'grid', gridTemplateColumns: '350px minmax(0, 1fr)', gap: '20px', width: '100%', alignItems: 'start' }}>
-            
+
             {/* LEFT CONTROL PANEL */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              
+
               {/* Category form (Admin only) */}
               {user.role === 'Admin' && (
                 <div className="stat-card" style={{ padding: '20px' }}>
                   <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '15px', color: 'var(--accent-secondary)' }}>Add Category</h3>
                   <form onSubmit={handleAddCategory} style={{ display: 'flex', gap: '10px' }}>
-                    <input 
-                      type="text" 
-                      placeholder="Category Name" 
+                    <input
+                      type="text"
+                      placeholder="Category Name"
                       value={newCategoryName}
                       onChange={(e) => setNewCategoryName(e.target.value)}
                       className="form-input"
@@ -1981,7 +1977,7 @@ function App() {
               {/* Add User Control Card */}
               <div className="stat-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--accent-primary)' }}>Manage Team</h3>
-                <button 
+                <button
                   onClick={() => {
                     setEditingUser(null);
                     setUserForm({
@@ -2044,7 +2040,7 @@ function App() {
                         <td>{m.category || '-'}</td>
                         <td>
                           <div style={{ display: 'flex', gap: '8px' }}>
-                            <button 
+                            <button
                               onClick={() => {
                                 setEditingUser(m);
                                 setUserForm({
@@ -2064,7 +2060,7 @@ function App() {
                             >
                               Edit
                             </button>
-                            <button 
+                            <button
                               onClick={() => handleDeleteUser(m.empId)}
                               className="btn-logout"
                               style={{ padding: '4px 8px', fontSize: '11px', borderColor: 'var(--danger)', color: 'var(--danger)' }}
@@ -2130,8 +2126,8 @@ function App() {
 
               <div className="stat-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--accent-primary)' }}>Google Sheet Integration</h3>
-                <button 
-                  onClick={syncGoogleSheet} 
+                <button
+                  onClick={syncGoogleSheet}
                   className="btn-primary"
                   style={{ background: 'var(--success)', padding: '12px', fontSize: '14px' }}
                 >
@@ -2148,9 +2144,9 @@ function App() {
                   {user.role === 'Admin' && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Filter Manager:</span>
-                      <select 
-                        value={selectedLeadManager} 
-                        onChange={(e) => setSelectedLeadManager(e.target.value)} 
+                      <select
+                        value={selectedLeadManager}
+                        onChange={(e) => setSelectedLeadManager(e.target.value)}
                         className="filter-select"
                         style={{ padding: '6px 12px', fontSize: '13px', background: 'var(--bg-secondary)', color: 'white', border: '1px solid var(--border-color)', borderRadius: '4px' }}
                       >
@@ -2184,8 +2180,8 @@ function App() {
                     {teamLeads.map(lead => (
                       <tr key={lead.number}>
                         <td>
-                          <strong 
-                            onClick={() => fetchContactHistory(lead.number)} 
+                          <strong
+                            onClick={() => fetchContactHistory(lead.number)}
                             style={{ cursor: 'pointer', textDecoration: 'underline', color: '#60a5fa' }}
                             title="Click to view history"
                           >
@@ -2207,14 +2203,14 @@ function App() {
                         </td>
                         <td>
                           <div style={{ display: 'flex', gap: '8px' }}>
-                            <button 
+                            <button
                               onClick={(e) => handleRemoveLead(e, lead.number)}
                               className="btn-logout"
                               style={{ padding: '4px 8px', fontSize: '11px', borderColor: 'var(--danger)', color: 'var(--danger)', background: 'transparent' }}
                             >
                               Remove
                             </button>
-                            <button 
+                            <button
                               onClick={() => {
                                 setTransferringLead(lead);
                                 setTransferToEmpId('');
@@ -2263,14 +2259,14 @@ function App() {
             <h3 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '20px', color: 'white' }}>
               {editingUser ? `✏️ Edit Profile: ${editingUser.name}` : '➕ Add Team Member'}
             </h3>
-            
+
             <form onSubmit={handleSaveUser}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                 <div className="form-group">
                   <label className="form-label">Full Name</label>
-                  <input 
-                    type="text" 
-                    value={userForm.name} 
+                  <input
+                    type="text"
+                    value={userForm.name}
                     onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
                     className="form-input"
                     placeholder="John Doe"
@@ -2279,9 +2275,9 @@ function App() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Employee ID</label>
-                  <input 
-                    type="text" 
-                    value={userForm.empId} 
+                  <input
+                    type="text"
+                    value={userForm.empId}
                     onChange={(e) => setUserForm({ ...userForm, empId: e.target.value })}
                     className="form-input"
                     placeholder="Numeric ID (leave empty for auto)"
@@ -2290,9 +2286,9 @@ function App() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Email Address</label>
-                  <input 
-                    type="email" 
-                    value={userForm.email} 
+                  <input
+                    type="email"
+                    value={userForm.email}
                     onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
                     className="form-input"
                     placeholder="john@example.com"
@@ -2301,9 +2297,9 @@ function App() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Phone Number</label>
-                  <input 
-                    type="text" 
-                    value={userForm.phone} 
+                  <input
+                    type="text"
+                    value={userForm.phone}
                     onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
                     className="form-input"
                     placeholder="10-digit number"
@@ -2312,9 +2308,9 @@ function App() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Password</label>
-                  <input 
-                    type="password" 
-                    value={userForm.password} 
+                  <input
+                    type="password"
+                    value={userForm.password}
                     onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
                     className="form-input"
                     placeholder={editingUser ? "Leave blank to keep current" : "••••••••"}
@@ -2323,8 +2319,8 @@ function App() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Select Role</label>
-                  <select 
-                    value={userForm.role} 
+                  <select
+                    value={userForm.role}
                     onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
                     className="filter-select"
                     style={{ width: '100%', padding: '12px' }}
@@ -2340,9 +2336,9 @@ function App() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Reports To (Emp ID)</label>
-                  <input 
-                    type="text" 
-                    value={userForm.reportsTo} 
+                  <input
+                    type="text"
+                    value={userForm.reportsTo}
                     onChange={(e) => setUserForm({ ...userForm, reportsTo: e.target.value })}
                     className="form-input"
                     placeholder="Reports to ID"
@@ -2352,8 +2348,8 @@ function App() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Assign Category</label>
-                  <select 
-                    value={userForm.category} 
+                  <select
+                    value={userForm.category}
                     onChange={(e) => setUserForm({ ...userForm, category: e.target.value })}
                     className="filter-select"
                     style={{ width: '100%', padding: '12px' }}
@@ -2368,9 +2364,9 @@ function App() {
                 <button type="submit" className="btn-primary" style={{ flex: 1, padding: '12px' }}>
                   Save User
                 </button>
-                <button 
-                  type="button" 
-                  onClick={() => { setShowUserModal(false); setEditingUser(null); }} 
+                <button
+                  type="button"
+                  onClick={() => { setShowUserModal(false); setEditingUser(null); }}
                   className="btn-logout"
                   style={{ flex: 1, padding: '12px' }}
                 >
@@ -2404,7 +2400,7 @@ function App() {
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
               Current Assignee: {transferringLead.assignedToName || 'Unknown'} (ID: {transferringLead.assignedTo})
             </p>
-            
+
             <div className="form-group" style={{ marginBottom: '20px' }}>
               <label className="form-label">Transfer To</label>
               <select
@@ -2422,7 +2418,7 @@ function App() {
             </div>
 
             <div style={{ display: 'flex', gap: '15px' }}>
-              <button 
+              <button
                 onClick={async () => {
                   if (!transferToEmpId) return;
                   try {
@@ -2448,13 +2444,13 @@ function App() {
                     alert("Error transferring lead");
                   }
                 }}
-                className="btn-primary" 
+                className="btn-primary"
                 style={{ flex: 1, padding: '12px' }}
               >
                 Confirm
               </button>
-              <button 
-                onClick={() => setTransferringLead(null)} 
+              <button
+                onClick={() => setTransferringLead(null)}
                 className="btn-logout"
                 style={{ flex: 1, padding: '12px' }}
               >
@@ -2483,7 +2479,7 @@ function App() {
           <div className="auth-card" style={{ maxWidth: '700px', width: '100%', padding: '30px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
             <h3 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '20px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>📜 Call History for {historyNumber}</span>
-              <button 
+              <button
                 onClick={() => setShowHistoryModal(false)}
                 className="btn-logout"
                 style={{ padding: '4px 10px', fontSize: '12px', border: '1px solid var(--border-color)', background: 'transparent' }}
@@ -2491,7 +2487,7 @@ function App() {
                 Close
               </button>
             </h3>
-            
+
             <div style={{ maxHeight: '400px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '15px' }}>
               {historyLogs.map(hLog => (
                 <div key={hLog.id} style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
@@ -2530,9 +2526,9 @@ function App() {
           <p>Address: A-24, Sec-68, Noida, JJ Imprint PVT. LTD</p>
           <p>
             LinkedIn Profile:{' '}
-            <a 
-              href="https://www.linkedin.com/in/harsh-vardhan-jha-577841242/" 
-              target="_blank" 
+            <a
+              href="https://www.linkedin.com/in/harsh-vardhan-jha-577841242/"
+              target="_blank"
               rel="noopener noreferrer"
               className="footer-link"
             >
