@@ -367,11 +367,13 @@ function App() {
         return { startDate: sevenDaysAgo.getTime(), endDate: end.getTime() };
       case 'Select Date':
         if (selectedDate) {
-          const dateStart = new Date(selectedDate);
-          dateStart.setHours(0, 0, 0, 0);
-          const dateEnd = new Date(selectedDate);
-          dateEnd.setHours(23, 59, 59, 999);
-          return { startDate: dateStart.getTime(), endDate: dateEnd.getTime() };
+          const parts = selectedDate.split('-').map(Number);
+          if (parts.length === 3) {
+            const [year, month, day] = parts;
+            const dateStart = new Date(year, month - 1, day, 0, 0, 0, 0);
+            const dateEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
+            return { startDate: dateStart.getTime(), endDate: dateEnd.getTime() };
+          }
         }
         return { startDate: null, endDate: null };
       case 'All':
@@ -1170,7 +1172,12 @@ function App() {
                 <button
                   key={option}
                   className={`date-pill ${dateFilter === option ? 'active' : ''}`}
-                  onClick={() => setDateFilter(option)}
+                  onClick={() => {
+                    setDateFilter(option);
+                    if (option === 'Select Date' && !selectedDate) {
+                      setSelectedDate(new Date().toISOString().split('T')[0]);
+                    }
+                  }}
                 >
                   {option}
                 </button>
@@ -1180,7 +1187,14 @@ function App() {
 
           {dateFilter === 'Select Date' && (
             <div className="filter-group">
-              <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="filter-input" />
+              <input 
+                type="date" 
+                value={selectedDate} 
+                onClick={(e) => { try { e.target.showPicker && e.target.showPicker(); } catch(err){} }}
+                onChange={(e) => setSelectedDate(e.target.value)} 
+                className="filter-input"
+                style={{ cursor: 'pointer', background: '#1e293b', border: '1px solid var(--info)', color: 'white', fontWeight: 'bold' }}
+              />
             </div>
           )}
 
