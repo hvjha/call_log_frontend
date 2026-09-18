@@ -47,6 +47,11 @@ function App() {
   const [statusFilter, setStatusFilter] = useState('All'); // Stat-card logs filter
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Right-side Cards Date Filters
+  const [interestedDateFilter, setInterestedDateFilter] = useState('All');
+  const [followUpDateFilter, setFollowUpDateFilter] = useState('All');
+  const [prospectDateFilter, setProspectDateFilter] = useState('All');
+
   // Executive-specific States
   const [leads, setLeads] = useState([]);
   const [teamLeads, setTeamLeads] = useState([]);
@@ -382,11 +387,64 @@ function App() {
     }
   };
 
+  // Helper to test if a log date falls into a filter
+  const isDateInFilter = (logDate, filter, specificDateStr) => {
+    if (!logDate || filter === 'All') return true;
+    const logD = new Date(logDate);
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+
+    if (filter === 'Today') {
+      return logD.getTime() >= start.getTime() && logD.getTime() <= end.getTime();
+    }
+    if (filter === 'Yesterday') {
+      const yStart = new Date(start);
+      yStart.setDate(yStart.getDate() - 1);
+      const yEnd = new Date(end);
+      yEnd.setDate(yEnd.getDate() - 1);
+      return logD.getTime() >= yStart.getTime() && logD.getTime() <= yEnd.getTime();
+    }
+    if (filter === 'Last 7 Days') {
+      const sDays = new Date(start);
+      sDays.setDate(sDays.getDate() - 7);
+      return logD.getTime() >= sDays.getTime() && logD.getTime() <= end.getTime();
+    }
+    if (filter === 'Select Date' && specificDateStr) {
+      const parts = specificDateStr.split('-').map(Number);
+      if (parts.length === 3) {
+        const [year, month, day] = parts;
+        const dStart = new Date(year, month - 1, day, 0, 0, 0, 0);
+        const dEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
+        return logD.getTime() >= dStart.getTime() && logD.getTime() <= dEnd.getTime();
+      }
+    }
+    return true;
+  };
+
+  const formatCallDate = (timestamp) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const yesterday = today - 86400000;
+    const logDay = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+
+    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    if (logDay === today) {
+      return `Today, ${timeStr}`;
+    } else if (logDay === yesterday) {
+      return `Yesterday, ${timeStr}`;
+    } else {
+      return `${date.toLocaleDateString([], { day: 'numeric', month: 'short' })}, ${timeStr}`;
+    }
+  };
+
   const fetchLogs = async () => {
     if (!user) return;
     try {
-      const hasSearch = searchQuery.trim().length > 0;
-      const { startDate, endDate } = hasSearch ? { startDate: null, endDate: null } : getDateRangeParams();
       const targetEmpIds = user.role === 'Executive'
         ? [user.empId]
         : (selectedMember === 'All' || !selectedMember ? [user.empId] : [selectedMember]);
@@ -406,7 +464,7 @@ function App() {
       const res = await fetch(`${API_BASE}/getFilteredLogs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetEmpIds, startDate, endDate, includeSubordinates: includeSubs })
+        body: JSON.stringify({ targetEmpIds, startDate: null, endDate: null, includeSubordinates: includeSubs })
       });
 
       if (res.ok) {
@@ -466,6 +524,9 @@ function App() {
     setStatusFilter('All');
     setSelectedMember('All');
     setSearchQuery('');
+    setInterestedDateFilter('All');
+    setFollowUpDateFilter('All');
+    setProspectDateFilter('All');
   };
 
   const triggerCall = async (number, name = 'Lead') => {
@@ -868,6 +929,8 @@ function App() {
 
   // CLIENT SIDE FILTERING LOGS
   const filteredLogs = latestLogsOnly.filter(log => {
+    const matchesDate = isDateInFilter(log.date, dateFilter, selectedDate);
+
     const query = searchQuery.trim().toLowerCase();
     const matchesSearch = query === '' ||
       (log.number && log.number.toLowerCase().includes(query)) ||
@@ -896,16 +959,20 @@ function App() {
       }
     }
 
-    return matchesSearch && matchesCategory && matchesStatus;
+    return matchesDate && matchesSearch && matchesCategory && matchesStatus;
   });
 
-  // METRICS COMPUTATIONS
-  const totalCalls = latestLogsOnly.length;
-  const interestedCalls = latestLogsOnly.filter(l => l.status && l.status.toLowerCase() === 'interested').length;
-  const followUpCalls = latestLogsOnly.filter(l => l.status && l.status.toLowerCase() === 'follow up').length;
-  const prospectCalls = latestLogsOnly.filter(l => l.status && l.status.toLowerCase() === 'prospect').length;
-  const enquiryCalls = latestLogsOnly.filter(l => l.enquiryReceived && l.enquiryReceived.toLowerCase() === 'yes').length;
-  const missedCalls = latestLogsOnly.filter(l => l.type === 3 || l.type === '3' || l.status === 'No Answer' || l.status === 'Not Answering' || l.status === 'Busy' || Number(l.duration) === 0).length;
+  // METRICS COMPUTATIONS (Filtered by top dateFilter)
+  const dateFilteredLatestLogs = React.useMemo(() => {
+    return latestLogsOnly.filter(l => isDateInFilter(l.date, dateFilter, selectedDate));
+  }, [latestLogsOnly, dateFilter, selectedDate]);
+
+  const totalCalls = dateFilteredLatestLogs.length;
+  const interestedCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'interested').length;
+  const followUpCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'follow up').length;
+  const prospectCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'prospect').length;
+  const enquiryCalls = dateFilteredLatestLogs.filter(l => l.enquiryReceived && l.enquiryReceived.toLowerCase() === 'yes').length;
+  const missedCalls = dateFilteredLatestLogs.filter(l => l.type === 3 || l.type === '3' || l.status === 'No Answer' || l.status === 'Not Answering' || l.status === 'Busy' || Number(l.duration) === 0).length;
 
   // Percentage Calculations
   const getPercentage = (count) => {
@@ -963,10 +1030,30 @@ function App() {
   const totalAchievementPct = Math.round((totalActual / totalPlanned) * 100) || 0;
   const overallPerf = getPerformanceStatus(totalAchievementPct);
 
-  // Quick Reference Lists
-  const interestedList = latestLogsOnly.filter(l => l.status && l.status.toLowerCase() === 'interested').slice(0, 20);
-  const followUpList = latestLogsOnly.filter(l => l.status && l.status.toLowerCase() === 'follow up').slice(0, 20);
-  const prospectList = latestLogsOnly.filter(l => l.status && l.status.toLowerCase() === 'prospect').slice(0, 20);
+  // Quick Reference Lists (Sorted descending by date)
+  const interestedList = React.useMemo(() => {
+    return latestLogsOnly
+      .filter(l => l.status && l.status.toLowerCase() === 'interested')
+      .filter(l => isDateInFilter(l.date, interestedDateFilter, ''))
+      .sort((a, b) => b.date - a.date)
+      .slice(0, 100);
+  }, [latestLogsOnly, interestedDateFilter]);
+
+  const followUpList = React.useMemo(() => {
+    return latestLogsOnly
+      .filter(l => l.status && l.status.toLowerCase() === 'follow up')
+      .filter(l => isDateInFilter(l.date, followUpDateFilter, ''))
+      .sort((a, b) => b.date - a.date)
+      .slice(0, 100);
+  }, [latestLogsOnly, followUpDateFilter]);
+
+  const prospectList = React.useMemo(() => {
+    return latestLogsOnly
+      .filter(l => l.status && l.status.toLowerCase() === 'prospect')
+      .filter(l => isDateInFilter(l.date, prospectDateFilter, ''))
+      .sort((a, b) => b.date - a.date)
+      .slice(0, 100);
+  }, [latestLogsOnly, prospectDateFilter]);
 
   // Group outcomes for Doughnut Chart
   const outcomeCounts = {
@@ -1733,9 +1820,31 @@ function App() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: '1150px' }}>
                 {/* BOX 1: INTERESTED */}
                 <div className="stat-card" style={{ padding: '16px', borderTop: '3px solid var(--success)', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                  <h4 style={{ fontSize: '13px', color: '#34d399', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>
-                    🟢 Interested Calls ({interestedList.length})
-                  </h4>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <h4 style={{ fontSize: '13px', color: '#34d399', fontWeight: 'bold', margin: 0, textTransform: 'uppercase' }}>
+                      🟢 Interested Calls ({interestedList.length})
+                    </h4>
+                    <select
+                      value={interestedDateFilter}
+                      onChange={(e) => setInterestedDateFilter(e.target.value)}
+                      style={{
+                        background: 'rgba(15, 23, 42, 0.8)',
+                        color: '#34d399',
+                        border: '1px solid var(--success)',
+                        borderRadius: '6px',
+                        padding: '2px 6px',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        outline: 'none'
+                      }}
+                    >
+                      <option value="All">All Dates</option>
+                      <option value="Today">Today</option>
+                      <option value="Yesterday">Yesterday</option>
+                      <option value="Last 7 Days">Last 7 Days</option>
+                    </select>
+                  </div>
                   <div className="right-column-list">
                     {interestedList.map(item => (
                       <div
@@ -1781,6 +1890,10 @@ function App() {
                           <span>📞</span>
                           <span style={{ textDecoration: 'underline' }}>{item.number}</span>
                         </div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span>🕒</span>
+                          <span>{formatCallDate(item.date)}</span>
+                        </div>
                       </div>
                     ))}
                     {interestedList.length === 0 && <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '20px' }}>No records.</div>}
@@ -1789,9 +1902,31 @@ function App() {
 
                 {/* BOX 2: FOLLOW UP */}
                 <div className="stat-card" style={{ padding: '16px', borderTop: '3px solid var(--warning)', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                  <h4 style={{ fontSize: '13px', color: '#fbbf24', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>
-                    🟡 Follow Up Calls ({followUpList.length})
-                  </h4>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <h4 style={{ fontSize: '13px', color: '#fbbf24', fontWeight: 'bold', margin: 0, textTransform: 'uppercase' }}>
+                      🟡 Follow Up Calls ({followUpList.length})
+                    </h4>
+                    <select
+                      value={followUpDateFilter}
+                      onChange={(e) => setFollowUpDateFilter(e.target.value)}
+                      style={{
+                        background: 'rgba(15, 23, 42, 0.8)',
+                        color: '#fbbf24',
+                        border: '1px solid var(--warning)',
+                        borderRadius: '6px',
+                        padding: '2px 6px',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        outline: 'none'
+                      }}
+                    >
+                      <option value="All">All Dates</option>
+                      <option value="Today">Today</option>
+                      <option value="Yesterday">Yesterday</option>
+                      <option value="Last 7 Days">Last 7 Days</option>
+                    </select>
+                  </div>
                   <div className="right-column-list">
                     {followUpList.map(item => (
                       <div
@@ -1837,6 +1972,10 @@ function App() {
                           <span>📞</span>
                           <span style={{ textDecoration: 'underline' }}>{item.number}</span>
                         </div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span>🕒</span>
+                          <span>{formatCallDate(item.date)}</span>
+                        </div>
                         {item.followUpDate && (
                           <div style={{ fontSize: '11px', color: '#fbbf24', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <span>📅</span>
@@ -1851,9 +1990,31 @@ function App() {
 
                 {/* BOX 3: PROSPECT */}
                 <div className="stat-card" style={{ padding: '16px', borderTop: '3px solid var(--accent-secondary)', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                  <h4 style={{ fontSize: '13px', color: '#f472b6', fontWeight: 'bold', marginBottom: '10px', textTransform: 'uppercase' }}>
-                    🌸 Prospect Calls ({prospectList.length})
-                  </h4>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <h4 style={{ fontSize: '13px', color: '#f472b6', fontWeight: 'bold', margin: 0, textTransform: 'uppercase' }}>
+                      🌸 Prospect Calls ({prospectList.length})
+                    </h4>
+                    <select
+                      value={prospectDateFilter}
+                      onChange={(e) => setProspectDateFilter(e.target.value)}
+                      style={{
+                        background: 'rgba(15, 23, 42, 0.8)',
+                        color: '#f472b6',
+                        border: '1px solid var(--accent-secondary)',
+                        borderRadius: '6px',
+                        padding: '2px 6px',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        outline: 'none'
+                      }}
+                    >
+                      <option value="All">All Dates</option>
+                      <option value="Today">Today</option>
+                      <option value="Yesterday">Yesterday</option>
+                      <option value="Last 7 Days">Last 7 Days</option>
+                    </select>
+                  </div>
                   <div className="right-column-list">
                     {prospectList.map(item => (
                       <div
@@ -1898,6 +2059,10 @@ function App() {
                         <div style={{ fontSize: '12px', color: '#60a5fa', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <span>📞</span>
                           <span style={{ textDecoration: 'underline' }}>{item.number}</span>
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span>🕒</span>
+                          <span>{formatCallDate(item.date)}</span>
                         </div>
                       </div>
                     ))}
