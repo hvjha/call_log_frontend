@@ -1769,50 +1769,52 @@ function App() {
                 </div>
 
                 {/* HOURLY PERFORMANCE REPORT TABLE */}
-                <div className="hourly-report-card">
-                  <h3 className="hourly-report-header">
-                    📈 Hourly Performance (Daily Target: 30 | Active Days: {numDays})
-                  </h3>
-                  <div className="table-wrapper hourly-table-wrapper" style={{ maxHeight: '750px' }}>
-                    <table className="logs-table" style={{ minWidth: '700px' }}>
-                      <thead>
-                        <tr>
-                          <th>Time Slot</th>
-                          <th>Planned Calls</th>
-                          <th>Actual Calls</th>
-                          <th>Achievement</th>
-                          <th>Performance Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {hourlyPerformance.map(row => (
-                          <tr key={row.label}>
-                            <td><strong>{row.label}</strong></td>
-                            <td>{row.planned}</td>
-                            <td><strong>{row.actual}</strong></td>
-                            <td>{row.achievementPct}%</td>
+                {user.role !== 'Executive' && (
+                  <div className="hourly-report-card">
+                    <h3 className="hourly-report-header">
+                      📈 Hourly Performance (Daily Target: 30 | Active Days: {numDays})
+                    </h3>
+                    <div className="table-wrapper hourly-table-wrapper" style={{ maxHeight: '750px' }}>
+                      <table className="logs-table" style={{ minWidth: '700px' }}>
+                        <thead>
+                          <tr>
+                            <th>Time Slot</th>
+                            <th>Planned Calls</th>
+                            <th>Actual Calls</th>
+                            <th>Achievement</th>
+                            <th>Performance Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {hourlyPerformance.map(row => (
+                            <tr key={row.label}>
+                              <td><strong>{row.label}</strong></td>
+                              <td>{row.planned}</td>
+                              <td><strong>{row.actual}</strong></td>
+                              <td>{row.achievementPct}%</td>
+                              <td>
+                                <span className={`badge-perf ${row.statusClass}`}>
+                                  {row.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                          <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderTop: '2px solid rgba(255, 255, 255, 0.15)' }}>
+                            <td><strong>Total Summary</strong></td>
+                            <td><strong>{totalPlanned}</strong></td>
+                            <td><strong>{totalActual}</strong></td>
+                            <td><strong>{totalAchievementPct}%</strong></td>
                             <td>
-                              <span className={`badge-perf ${row.statusClass}`}>
-                                {row.status}
+                              <span className={`badge-perf ${overallPerf.className}`}>
+                                {overallPerf.label}
                               </span>
                             </td>
                           </tr>
-                        ))}
-                        <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderTop: '2px solid rgba(255, 255, 255, 0.15)' }}>
-                          <td><strong>Total Summary</strong></td>
-                          <td><strong>{totalPlanned}</strong></td>
-                          <td><strong>{totalActual}</strong></td>
-                          <td><strong>{totalAchievementPct}%</strong></td>
-                          <td>
-                            <span className={`badge-perf ${overallPerf.className}`}>
-                              {overallPerf.label}
-                            </span>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
+                )}
 
               </div>
 
