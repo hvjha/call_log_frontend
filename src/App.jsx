@@ -947,67 +947,61 @@ function App() {
     return Array.from(latestMap.values());
   }, [logs]);
 
-  // CLIENT SIDE FILTERING LOGS
-  const filteredLogs = latestLogsOnly.filter(log => {
-    const matchesDate = isDateInFilter(log.date, dateFilter, selectedDate);
-
-    const query = searchQuery.trim().toLowerCase();
-    const matchesSearch = query === '' ||
-      (log.number && log.number.toLowerCase().includes(query)) ||
-      (log.name && log.name.toLowerCase().includes(query)) ||
-      (log.contactName && log.contactName.toLowerCase().includes(query)) ||
-      (log.companyName && log.companyName.toLowerCase().includes(query)) ||
-      (log.address && log.address.toLowerCase().includes(query)) ||
-      (log.email && log.email.toLowerCase().includes(query)) ||
-      (log.syncedBy && log.syncedBy.toLowerCase().includes(query)) ||
-      (log.description && log.description.toLowerCase().includes(query)) ||
-      (log.status && log.status.toLowerCase().includes(query)) ||
-      (log.category && log.category.toLowerCase().includes(query)) ||
-      (log.format && log.format.toLowerCase().includes(query)) ||
-      (log.followUpDate && log.followUpDate.toLowerCase().includes(query));
-
-    const matchesCategory = selectedCategory === 'All' || log.category === selectedCategory;
-
-    let matchesStatus = true;
-    if (statusFilter !== 'All') {
-      if (statusFilter === 'Enquiry') {
-        matchesStatus = log.enquiryReceived && log.enquiryReceived.toLowerCase() === 'yes';
-      } else if (statusFilter === 'under30') {
-        matchesStatus = Number(log.duration || 0) > 0 && Number(log.duration || 0) <= 30;
-      } else if (statusFilter === 'over30') {
-        matchesStatus = Number(log.duration || 0) > 30;
-      } else {
-        matchesStatus = log.status && log.status.toLowerCase() === statusFilter.toLowerCase();
-      }
-    }
-
-    return matchesDate && matchesSearch && matchesCategory && matchesStatus;
-  });
-
-  // METRICS COMPUTATIONS (Filtered by top dateFilter)
+  // METRICS COMPUTATIONS (Report Cards: Include ONLY calls whose duration > 0)
   const dateFilteredLatestLogs = React.useMemo(() => {
     return latestLogsOnly.filter(l => {
+      const statusLower = (l.status || '').toLowerCase().trim();
+      const unconnected = ['busy', 'not answering', 'no answer', 'missed', 'rejected', 'unconnected'];
+      const dur = (unconnected.includes(statusLower) || !l.duration || Number(l.duration) <= 0) ? 0 : Number(l.duration);
+      if (dur <= 0) return false;
       return isDateInFilter(l.date, dateFilter, selectedDate);
     });
   }, [latestLogsOnly, dateFilter, selectedDate]);
+
+  // CLIENT SIDE FILTERING LOGS (Derived strictly from dateFilteredLatestLogs so table matches report cards)
+  const filteredLogs = React.useMemo(() => {
+    return dateFilteredLatestLogs.filter(log => {
+      const query = searchQuery.trim().toLowerCase();
+      const matchesSearch = query === '' ||
+        (log.number && log.number.toLowerCase().includes(query)) ||
+        (log.name && log.name.toLowerCase().includes(query)) ||
+        (log.contactName && log.contactName.toLowerCase().includes(query)) ||
+        (log.companyName && log.companyName.toLowerCase().includes(query)) ||
+        (log.address && log.address.toLowerCase().includes(query)) ||
+        (log.email && log.email.toLowerCase().includes(query)) ||
+        (log.syncedBy && log.syncedBy.toLowerCase().includes(query)) ||
+        (log.description && log.description.toLowerCase().includes(query)) ||
+        (log.status && log.status.toLowerCase().includes(query)) ||
+        (log.category && log.category.toLowerCase().includes(query)) ||
+        (log.format && log.format.toLowerCase().includes(query)) ||
+        (log.followUpDate && log.followUpDate.toLowerCase().includes(query));
+
+      const matchesCategory = selectedCategory === 'All' || log.category === selectedCategory;
+
+      let matchesStatus = true;
+      if (statusFilter !== 'All') {
+        if (statusFilter === 'Enquiry') {
+          matchesStatus = log.enquiryReceived && log.enquiryReceived.toLowerCase() === 'yes';
+        } else if (statusFilter === 'under30') {
+          matchesStatus = Number(log.duration || 0) > 0 && Number(log.duration || 0) <= 30;
+        } else if (statusFilter === 'over30') {
+          matchesStatus = Number(log.duration || 0) > 30;
+        } else {
+          matchesStatus = log.status && log.status.toLowerCase() === statusFilter.toLowerCase();
+        }
+      }
+
+      return matchesSearch && matchesCategory && matchesStatus;
+    });
+  }, [dateFilteredLatestLogs, searchQuery, selectedCategory, statusFilter]);
 
   const totalCalls = dateFilteredLatestLogs.length;
   const interestedCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'interested').length;
   const followUpCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'follow up').length;
   const prospectCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'prospect').length;
   const enquiryCalls = dateFilteredLatestLogs.filter(l => l.enquiryReceived && l.enquiryReceived.toLowerCase() === 'yes').length;
-  const under30Calls = dateFilteredLatestLogs.filter(l => {
-    const statusLower = (l.status || '').toLowerCase().trim();
-    const unconnected = ['busy', 'not answering', 'no answer', 'missed', 'rejected', 'unconnected'];
-    const dur = (unconnected.includes(statusLower) || !l.duration || Number(l.duration) <= 0) ? 0 : Number(l.duration);
-    return dur <= 30;
-  }).length;
-  const over30Calls = dateFilteredLatestLogs.filter(l => {
-    const statusLower = (l.status || '').toLowerCase().trim();
-    const unconnected = ['busy', 'not answering', 'no answer', 'missed', 'rejected', 'unconnected'];
-    const dur = (unconnected.includes(statusLower) || !l.duration || Number(l.duration) <= 0) ? 0 : Number(l.duration);
-    return dur > 30;
-  }).length;
+  const under30Calls = dateFilteredLatestLogs.filter(l => Number(l.duration || 0) <= 30).length;
+  const over30Calls = dateFilteredLatestLogs.filter(l => Number(l.duration || 0) > 30).length;
 
   // Percentage Calculations
   const getPercentage = (count) => {
@@ -1016,7 +1010,7 @@ function App() {
   };
 
   // HOURLY PERFORMANCE COMPUTATIONS
-  const uniqueDaysDialed = new Set(filteredLogs.map(log => new Date(log.date).toDateString()));
+  const uniqueDaysDialed = new Set(dateFilteredLatestLogs.map(log => new Date(log.date).toDateString()));
   const numDays = Math.max(uniqueDaysDialed.size, 1);
   const PLANNED_PER_HOUR = 30 * numDays;
 
@@ -1067,41 +1061,40 @@ function App() {
 
   // Quick Reference Lists (Sorted descending by date)
   const interestedList = React.useMemo(() => {
-    return latestLogsOnly
+    return dateFilteredLatestLogs
       .filter(l => l.status && l.status.toLowerCase() === 'interested')
       .filter(l => isDateInFilter(l.date, interestedDateFilter, ''))
       .sort((a, b) => b.date - a.date)
       .slice(0, 100);
-  }, [latestLogsOnly, interestedDateFilter]);
+  }, [dateFilteredLatestLogs, interestedDateFilter]);
 
   const followUpList = React.useMemo(() => {
-    return latestLogsOnly
+    return dateFilteredLatestLogs
       .filter(l => l.status && l.status.toLowerCase() === 'follow up')
       .filter(l => isDateInFilter(l.date, followUpDateFilter, ''))
       .sort((a, b) => b.date - a.date)
       .slice(0, 100);
-  }, [latestLogsOnly, followUpDateFilter]);
+  }, [dateFilteredLatestLogs, followUpDateFilter]);
 
   const prospectList = React.useMemo(() => {
-    return latestLogsOnly
+    return dateFilteredLatestLogs
       .filter(l => l.status && l.status.toLowerCase() === 'prospect')
       .filter(l => isDateInFilter(l.date, prospectDateFilter, ''))
       .sort((a, b) => b.date - a.date)
       .slice(0, 100);
-  }, [latestLogsOnly, prospectDateFilter]);
+  }, [dateFilteredLatestLogs, prospectDateFilter]);
 
   // Group outcomes for Doughnut Chart
   const outcomeCounts = {
     'Interested': 0,
     'Follow Up': 0,
     'Prospect': 0,
-    'Missed/Busy': 0,
     'Enquiry Received': 0,
     'Called': 0,
     'Other': 0
   };
 
-  filteredLogs.forEach(log => {
+  dateFilteredLatestLogs.forEach(log => {
     const status = log.status || 'Pending';
     const enquiry = log.enquiryReceived;
     if (status === 'Interested' && enquiry === 'Yes') {
@@ -1112,8 +1105,6 @@ function App() {
       outcomeCounts['Follow Up']++;
     } else if (status === 'Prospect') {
       outcomeCounts['Prospect']++;
-    } else if (status === 'Busy' || status === 'No Answer' || status === 'Not Answering' || status === 'Not Interested' || Number(log.duration) === 0) {
-      outcomeCounts['Missed/Busy']++;
     } else if (status === 'Called') {
       outcomeCounts['Called']++;
     } else {
