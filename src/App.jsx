@@ -603,12 +603,6 @@ function App() {
       }
     }
 
-    // Rule: Interested status can ONLY be selected if duration > 30 sec
-    if (callOutcome === 'Interested' && finalDuration <= 30) {
-      alert("An 'Interested' outcome is only allowed for calls with a duration greater than 30 seconds.");
-      return;
-    }
-
     setIsSubmitting(true);
 
     const callRecord = {
