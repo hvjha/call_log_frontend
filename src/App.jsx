@@ -860,27 +860,42 @@ function App() {
     }
   };
 
+  const getExecutiveName = (log) => {
+    if (!log) return '-';
+    if (log.syncedBy && log.syncedBy.trim() !== '') return log.syncedBy;
+    if (log.syncedByEmpId) {
+      const found = allUsers.find(u => String(u.empId) === String(log.syncedByEmpId));
+      if (found && found.name) return found.name;
+    }
+    return user?.name || '-';
+  };
+
   const exportToCsv = () => {
     if (filteredLogs.length === 0) {
       alert("No logs to export");
       return;
     }
     const headers = ["ID", "Time", "Executive", "Lead Name", "Phone", "Company", "Address", "Email", "Format", "Duration (sec)", "Outcome", "Enquiry Received", "Notes"];
-    const rows = filteredLogs.map(log => [
-      log.id,
-      new Date(log.date).toLocaleString(),
-      log.syncedBy || '',
-      log.contactName || log.name || '',
-      log.number,
-      log.companyName || '',
-      log.address || '',
-      log.email || '',
-      log.format || '',
-      log.duration || 0,
-      log.status || '',
-      log.enquiryReceived || 'No',
-      (log.description || '').replace(/"/g, '""').replace(/\r?\n/g, ' ')
-    ]);
+    const rows = filteredLogs.map(log => {
+      const statusLower = (log.status || '').toLowerCase().trim();
+      const unconnected = ['busy', 'not answering', 'no answer', 'missed', 'rejected', 'unconnected'];
+      const dur = (unconnected.includes(statusLower) || !log.duration || log.duration <= 0) ? 0 : log.duration;
+      return [
+        log.id,
+        new Date(log.date).toLocaleString(),
+        getExecutiveName(log),
+        log.contactName || log.name || '',
+        log.number,
+        log.companyName || '',
+        log.address || '',
+        log.email || '',
+        log.format || '',
+        dur,
+        log.status || '',
+        log.enquiryReceived || 'No',
+        (log.description || '').replace(/"/g, '""').replace(/\r?\n/g, ' ')
+      ];
+    });
 
     const csvContent = "data:text/csv;charset=utf-8,\uFEFF"
       + [headers.join(","), ...rows.map(e => e.map(val => `"${val}"`).join(","))].join("\n");
@@ -916,7 +931,12 @@ function App() {
     }
   };
 
-  const formatDuration = (sec) => {
+  const formatDuration = (sec, status) => {
+    const statusLower = (status || '').toLowerCase().trim();
+    const unconnected = ['busy', 'not answering', 'no answer', 'missed', 'rejected', 'unconnected'];
+    if (unconnected.includes(statusLower) || !sec || sec <= 0) {
+      return '00:00';
+    }
     const mins = Math.floor(sec / 60);
     const secs = sec % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
@@ -1734,7 +1754,7 @@ function App() {
                       <thead>
                         <tr>
                           <th>Time</th>
-                          {user.role !== 'Executive' && <th>Executive</th>}
+                          <th>Executive</th>
                           <th>Lead Name</th>
                           <th>Phone</th>
                           <th>Company</th>
@@ -1751,7 +1771,7 @@ function App() {
                         {filteredLogs.map(log => (
                           <tr key={log.id}>
                             <td>{new Date(log.date).toLocaleTimeString()}</td>
-                            {user.role !== 'Executive' && <td>{log.syncedBy}</td>}
+                            <td>{getExecutiveName(log)}</td>
                             <td>{log.contactName || log.name || '-'}</td>
                             <td>
                               <span
@@ -1766,7 +1786,7 @@ function App() {
                             <td>{log.address || '-'}</td>
                             <td>{log.email || '-'}</td>
                             <td>{log.format && log.format !== 'Select Format' ? log.format : '-'}</td>
-                            <td>{formatDuration(log.duration)}</td>
+                            <td>{formatDuration(log.duration, log.status)}</td>
                             <td>
                               <span className={`badge-outcome ${log.status?.toLowerCase().replace(' ', '-') || 'busy'}`}>
                                 {log.status || 'No Status'}
@@ -1778,7 +1798,7 @@ function App() {
                         ))}
                         {filteredLogs.length === 0 && (
                           <tr>
-                            <td colSpan={user.role !== 'Executive' ? 12 : 11} className="empty-state">
+                            <td colSpan={12} className="empty-state">
                               No call history logs found matching current filters.
                             </td>
                           </tr>
@@ -2685,10 +2705,10 @@ function App() {
                     </span>
                   </div>
                   <div style={{ fontSize: '13px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                    <div><strong>Caller:</strong> {hLog.syncedBy || '-'}</div>
+                    <div><strong>Caller:</strong> {getExecutiveName(hLog)}</div>
                     <div><strong>Format:</strong> {hLog.format || '-'}</div>
                     <div><strong>Company:</strong> {hLog.companyName || '-'}</div>
-                    <div><strong>Duration:</strong> {hLog.duration}s</div>
+                    <div><strong>Duration:</strong> {formatDuration(hLog.duration, hLog.status)}</div>
                     {hLog.followUpDate && <div style={{ color: '#fbbf24', gridColumn: 'span 2' }}><strong>📅 Follow-Up Date:</strong> {hLog.followUpDate}</div>}
                   </div>
                   <div style={{ fontSize: '13px', color: '#ccc' }}>
