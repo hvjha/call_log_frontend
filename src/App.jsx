@@ -1406,10 +1406,12 @@ function App() {
 
               {/* STATS CARDS ROW (6 CARDS FILLING THE REMAINING WIDTH) */}
               <div className="stats-row" style={{ flex: 1 }}>
-                <div className={`stat-card stat-card-total ${statusFilter === 'All' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('All')}>
-                  <div className="stat-val">{totalCalls}</div>
-                  <div className="stat-label">Total Calls</div>
-                </div>
+                {user.role !== 'Executive' && (
+                  <div className={`stat-card stat-card-total ${statusFilter === 'All' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('All')}>
+                    <div className="stat-val">{totalCalls}</div>
+                    <div className="stat-label">Total Calls</div>
+                  </div>
+                )}
                 <div className={`stat-card ${statusFilter === 'effective' ? 'active-filter' : ''}`} style={{ borderLeft: '4px solid #3b82f6', cursor: 'pointer' }} onClick={() => setStatusFilter('effective')}>
                   <div className="stat-val" style={{ color: '#60a5fa' }}>{effectiveCalls}</div>
                   <div className="stat-label">
