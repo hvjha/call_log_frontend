@@ -869,7 +869,7 @@ function App() {
       alert("No logs to export");
       return;
     }
-    const headers = ["ID", "Time", "Executive", "Lead Name", "Phone", "Company", "Address", "Email", "Format", "Duration (sec)", "Outcome", "Enquiry Received", "Notes"];
+    const headers = ["ID", "Time", "Executive", "Lead Name", "Phone", "Company", "Address", "Email", "Format", "Duration (sec)", "Effective Call", "Outcome", "Enquiry Received", "Notes"];
     const rows = filteredLogs.map(log => {
       const statusLower = (log.status || '').toLowerCase().trim();
       const unconnected = ['busy', 'not answering', 'no answer', 'missed', 'rejected', 'unconnected'];
@@ -885,6 +885,7 @@ function App() {
         log.email || '',
         log.format || '',
         dur,
+        dur > 0 ? 'Yes' : 'No',
         log.status || '',
         log.enquiryReceived || 'No',
         (log.description || '').replace(/"/g, '""').replace(/\r?\n/g, ' ')
@@ -976,7 +977,11 @@ function App() {
 
       let matchesStatus = true;
       if (statusFilter !== 'All') {
-        if (statusFilter === 'Enquiry') {
+        if (statusFilter === 'effective') {
+          const statusLower = (log.status || '').toLowerCase().trim();
+          const unconnected = ['busy', 'not answering', 'no answer', 'missed', 'rejected', 'unconnected'];
+          matchesStatus = Number(log.duration || 0) > 0 && !unconnected.includes(statusLower);
+        } else if (statusFilter === 'Enquiry') {
           matchesStatus = log.enquiryReceived && log.enquiryReceived.toLowerCase() === 'yes';
         } else if (statusFilter === 'under30') {
           matchesStatus = Number(log.duration || 0) <= 30;
@@ -992,6 +997,11 @@ function App() {
   }, [dateFilteredLatestLogs, searchQuery, selectedCategory, statusFilter]);
 
   const totalCalls = dateFilteredLatestLogs.length;
+  const effectiveCalls = dateFilteredLatestLogs.filter(l => {
+    const statusLower = (l.status || '').toLowerCase().trim();
+    const unconnected = ['busy', 'not answering', 'no answer', 'missed', 'rejected', 'unconnected'];
+    return Number(l.duration || 0) > 0 && !unconnected.includes(statusLower);
+  }).length;
   const interestedCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'interested').length;
   const followUpCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'follow up').length;
   const prospectCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'prospect').length;
@@ -1400,6 +1410,12 @@ function App() {
                   <div className="stat-val">{totalCalls}</div>
                   <div className="stat-label">Total Calls</div>
                 </div>
+                <div className={`stat-card ${statusFilter === 'effective' ? 'active-filter' : ''}`} style={{ borderLeft: '4px solid #3b82f6', cursor: 'pointer' }} onClick={() => setStatusFilter('effective')}>
+                  <div className="stat-val" style={{ color: '#60a5fa' }}>{effectiveCalls}</div>
+                  <div className="stat-label">
+                    <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(effectiveCalls)})</span> Effective (&gt; 0s)
+                  </div>
+                </div>
                 <div className={`stat-card stat-card-interested ${statusFilter === 'Interested' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('Interested')}>
                   <div className="stat-val">{interestedCalls}</div>
                   <div className="stat-label">
@@ -1750,6 +1766,7 @@ function App() {
                           <th>Email</th>
                           <th>Format</th>
                           <th>Duration</th>
+                          <th>Effective Call</th>
                           <th>Outcome</th>
                           <th>Enquiry</th>
                           <th>Notes</th>
@@ -1775,6 +1792,11 @@ function App() {
                             <td>{log.email || '-'}</td>
                             <td>{log.format && log.format !== 'Select Format' ? log.format : '-'}</td>
                             <td>{formatDuration(log.duration, log.status)}</td>
+                            <td>
+                              <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', background: Number(log.duration || 0) > 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)', color: Number(log.duration || 0) > 0 ? '#10b981' : '#ef4444' }}>
+                                {Number(log.duration || 0) > 0 ? 'Yes' : 'No'}
+                              </span>
+                            </td>
                             <td>
                               <span className={`badge-outcome ${log.status?.toLowerCase().replace(' ', '-') || 'busy'}`}>
                                 {log.status || 'No Status'}
