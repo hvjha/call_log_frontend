@@ -164,7 +164,9 @@ function App() {
 
     newSocket.on('connect', () => {
       console.log('Connected to socket server');
-      newSocket.emit('register', { empId: user.empId, type: 'web' });
+      if (user?.empId) {
+        newSocket.emit('register', { empId: String(user.empId).trim(), type: 'web' });
+      }
     });
 
     newSocket.on('call-state-update', (data) => {
@@ -544,7 +546,7 @@ function App() {
     }, 15000);
 
     socket.emit('trigger-call', {
-      empId: user.empId,
+      empId: String(user.empId).trim(),
       phoneNumber: number,
       contactName: name
     });
@@ -590,8 +592,6 @@ function App() {
       return;
     }
 
-    setIsSubmitting(true);
-
     const isUnconnected = callOutcome === 'Busy' || callOutcome === 'No Answer' || activeCall.status === 'Triggered' || activeCall.status === 'Dialing' || activeCall.status === 'Ringing';
 
     let finalDuration = 0;
@@ -602,6 +602,14 @@ function App() {
         finalDuration = callTimer;
       }
     }
+
+    // Rule: Interested status can ONLY be selected if duration > 30 sec
+    if (callOutcome === 'Interested' && finalDuration <= 30) {
+      alert("An 'Interested' outcome is only allowed for calls with a duration greater than 30 seconds.");
+      return;
+    }
+
+    setIsSubmitting(true);
 
     const callRecord = {
       id: Date.now().toString(),
@@ -637,16 +645,14 @@ function App() {
       });
 
       const data = await res.json();
-      if (res.ok && data.saved && data.sheetsSynced) {
+      if (res.ok && data.saved) {
         setLeads(prev => prev.filter(l => l.number !== activeCall.phoneNumber));
         setSelectedLead(null);
         setActiveCall(null);
         stopTimer();
-        alert('Call synced successfully!');
+        alert('Call details saved to database successfully!');
         fetchLeads();
         fetchLogs();
-      } else if (res.ok && data.saved) {
-        alert('Saved in the app, but Google Sheets sync failed. Please retry.');
       } else {
         alert('Failed to save outcome. Please try again.');
       }
@@ -952,8 +958,10 @@ function App() {
     if (statusFilter !== 'All') {
       if (statusFilter === 'Enquiry') {
         matchesStatus = log.enquiryReceived && log.enquiryReceived.toLowerCase() === 'yes';
-      } else if (statusFilter === 'Missed') {
-        matchesStatus = log.type === 3 || log.type === '3' || log.status === 'No Answer' || log.status === 'Not Answering' || log.status === 'Busy' || Number(log.duration) === 0;
+      } else if (statusFilter === 'under30') {
+        matchesStatus = Number(log.duration || 0) > 0 && Number(log.duration || 0) <= 30;
+      } else if (statusFilter === 'over30') {
+        matchesStatus = Number(log.duration || 0) > 30;
       } else {
         matchesStatus = log.status && log.status.toLowerCase() === statusFilter.toLowerCase();
       }
@@ -962,9 +970,14 @@ function App() {
     return matchesDate && matchesSearch && matchesCategory && matchesStatus;
   });
 
-  // METRICS COMPUTATIONS (Filtered by top dateFilter)
+  // METRICS COMPUTATIONS (Filtered by top dateFilter, excluding 0s & Missed/Busy calls)
   const dateFilteredLatestLogs = React.useMemo(() => {
-    return latestLogsOnly.filter(l => isDateInFilter(l.date, dateFilter, selectedDate));
+    return latestLogsOnly.filter(l => {
+      const dur = Number(l.duration || 0);
+      const st = (l.status || '').toLowerCase();
+      if (dur <= 0 || st.includes('missed') || st.includes('busy') || st === 'rejected') return false;
+      return isDateInFilter(l.date, dateFilter, selectedDate);
+    });
   }, [latestLogsOnly, dateFilter, selectedDate]);
 
   const totalCalls = dateFilteredLatestLogs.length;
@@ -972,7 +985,8 @@ function App() {
   const followUpCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'follow up').length;
   const prospectCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'prospect').length;
   const enquiryCalls = dateFilteredLatestLogs.filter(l => l.enquiryReceived && l.enquiryReceived.toLowerCase() === 'yes').length;
-  const missedCalls = dateFilteredLatestLogs.filter(l => l.type === 3 || l.type === '3' || l.status === 'No Answer' || l.status === 'Not Answering' || l.status === 'Busy' || Number(l.duration) === 0).length;
+  const under30Calls = dateFilteredLatestLogs.filter(l => Number(l.duration || 0) > 0 && Number(l.duration || 0) <= 30).length;
+  const over30Calls = dateFilteredLatestLogs.filter(l => Number(l.duration || 0) > 30).length;
 
   // Percentage Calculations
   const getPercentage = (count) => {
@@ -1390,10 +1404,16 @@ function App() {
                     <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(followUpCalls)})</span> Follow Up
                   </div>
                 </div>
-                <div className={`stat-card stat-card-missed ${statusFilter === 'Missed' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('Missed')}>
-                  <div className="stat-val">{missedCalls}</div>
+                <div className={`stat-card ${statusFilter === 'under30' ? 'active-filter' : ''}`} style={{ borderLeft: '4px solid #f59e0b', cursor: 'pointer' }} onClick={() => setStatusFilter('under30')}>
+                  <div className="stat-val" style={{ color: '#f59e0b' }}>{under30Calls}</div>
                   <div className="stat-label">
-                    <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(missedCalls)})</span> Missed / Busy
+                    <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(under30Calls)})</span> Duration &lt; 30s
+                  </div>
+                </div>
+                <div className={`stat-card ${statusFilter === 'over30' ? 'active-filter' : ''}`} style={{ borderLeft: '4px solid #10b981', cursor: 'pointer' }} onClick={() => setStatusFilter('over30')}>
+                  <div className="stat-val" style={{ color: '#10b981' }}>{over30Calls}</div>
+                  <div className="stat-label">
+                    <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(over30Calls)})</span> Duration &gt; 30s
                   </div>
                 </div>
                 <div className={`stat-card stat-card-prospect ${statusFilter === 'Prospect' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('Prospect')}>
