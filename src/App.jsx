@@ -990,12 +990,9 @@ function App() {
     return matchesDate && matchesSearch && matchesCategory && matchesStatus;
   });
 
-  // METRICS COMPUTATIONS (Filtered by top dateFilter, excluding 0s & Missed/Busy calls)
+  // METRICS COMPUTATIONS (Filtered by top dateFilter)
   const dateFilteredLatestLogs = React.useMemo(() => {
     return latestLogsOnly.filter(l => {
-      const dur = Number(l.duration || 0);
-      const st = (l.status || '').toLowerCase();
-      if (dur <= 0 || st.includes('missed') || st.includes('busy') || st === 'rejected') return false;
       return isDateInFilter(l.date, dateFilter, selectedDate);
     });
   }, [latestLogsOnly, dateFilter, selectedDate]);
@@ -1005,8 +1002,18 @@ function App() {
   const followUpCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'follow up').length;
   const prospectCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'prospect').length;
   const enquiryCalls = dateFilteredLatestLogs.filter(l => l.enquiryReceived && l.enquiryReceived.toLowerCase() === 'yes').length;
-  const under30Calls = dateFilteredLatestLogs.filter(l => Number(l.duration || 0) > 0 && Number(l.duration || 0) <= 30).length;
-  const over30Calls = dateFilteredLatestLogs.filter(l => Number(l.duration || 0) > 30).length;
+  const under30Calls = dateFilteredLatestLogs.filter(l => {
+    const statusLower = (l.status || '').toLowerCase().trim();
+    const unconnected = ['busy', 'not answering', 'no answer', 'missed', 'rejected', 'unconnected'];
+    const dur = (unconnected.includes(statusLower) || !l.duration || Number(l.duration) <= 0) ? 0 : Number(l.duration);
+    return dur <= 30;
+  }).length;
+  const over30Calls = dateFilteredLatestLogs.filter(l => {
+    const statusLower = (l.status || '').toLowerCase().trim();
+    const unconnected = ['busy', 'not answering', 'no answer', 'missed', 'rejected', 'unconnected'];
+    const dur = (unconnected.includes(statusLower) || !l.duration || Number(l.duration) <= 0) ? 0 : Number(l.duration);
+    return dur > 30;
+  }).length;
 
   // Percentage Calculations
   const getPercentage = (count) => {
