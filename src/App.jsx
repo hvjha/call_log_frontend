@@ -947,13 +947,9 @@ function App() {
     return Array.from(latestMap.values());
   }, [logs]);
 
-  // METRICS COMPUTATIONS (Report Cards: Include ONLY calls whose duration > 0)
+  // METRICS COMPUTATIONS (Include ALL calls so total today call counts show accurately)
   const dateFilteredLatestLogs = React.useMemo(() => {
     return latestLogsOnly.filter(l => {
-      const statusLower = (l.status || '').toLowerCase().trim();
-      const unconnected = ['busy', 'not answering', 'no answer', 'missed', 'rejected', 'unconnected'];
-      const dur = (unconnected.includes(statusLower) || !l.duration || Number(l.duration) <= 0) ? 0 : Number(l.duration);
-      if (dur <= 0) return false;
       return isDateInFilter(l.date, dateFilter, selectedDate);
     });
   }, [latestLogsOnly, dateFilter, selectedDate]);
@@ -983,7 +979,7 @@ function App() {
         if (statusFilter === 'Enquiry') {
           matchesStatus = log.enquiryReceived && log.enquiryReceived.toLowerCase() === 'yes';
         } else if (statusFilter === 'under30') {
-          matchesStatus = Number(log.duration || 0) > 0 && Number(log.duration || 0) <= 30;
+          matchesStatus = Number(log.duration || 0) <= 30;
         } else if (statusFilter === 'over30') {
           matchesStatus = Number(log.duration || 0) > 30;
         } else {
