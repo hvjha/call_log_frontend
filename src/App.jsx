@@ -1041,7 +1041,7 @@ function App() {
   };
 
   const hourlyPerformance = hourSlots.map(slot => {
-    const actual = filteredLogs.filter(log => {
+    const actual = dateFilteredLatestLogs.filter(log => {
       const logHour = new Date(log.date).getHours();
       return logHour === slot.hour;
     }).length;
