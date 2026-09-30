@@ -54,7 +54,10 @@ function App() {
 
   // Executive-specific States
   const [leads, setLeads] = useState([]);
+  const [leadStatusFilter, setLeadStatusFilter] = useState('Pending'); // 'Pending' | 'Called' | 'All'
+  const [leadSearchQuery, setLeadSearchQuery] = useState('');
   const [teamLeads, setTeamLeads] = useState([]);
+  const [teamLeadSearchQuery, setTeamLeadSearchQuery] = useState('');
   const [selectedLead, setSelectedLead] = useState(null);
   const [manualPhone, setManualPhone] = useState('');
   const [activeCall, setActiveCall] = useState(null); // { phoneNumber, name, status, duration }
@@ -516,6 +519,8 @@ function App() {
     setSelectedLead(null);
     setActiveCall(null);
     setLogs([]);
+    setLeadSearchQuery('');
+    setTeamLeadSearchQuery('');
     stopTimer();
   };
 
@@ -529,6 +534,9 @@ function App() {
     setInterestedDateFilter('All');
     setFollowUpDateFilter('All');
     setProspectDateFilter('All');
+    setLeadStatusFilter('Pending');
+    setLeadSearchQuery('');
+    setTeamLeadSearchQuery('');
   };
 
   const triggerCall = async (number, name = 'Lead') => {
@@ -640,7 +648,7 @@ function App() {
 
       const data = await res.json();
       if (res.ok && data.saved) {
-        setLeads(prev => prev.filter(l => l.number !== activeCall.phoneNumber));
+        setLeads(prev => prev.map(l => l.number === activeCall.phoneNumber ? { ...l, status: 'Called' } : l));
         setSelectedLead(null);
         setActiveCall(null);
         stopTimer();
@@ -703,7 +711,7 @@ function App() {
       });
       const data = await res.json();
       if (res.ok && data.saved && data.sheetsSynced) {
-        setLeads(prev => prev.filter(l => l.number !== activeCall.phoneNumber));
+        setLeads(prev => prev.map(l => l.number === activeCall.phoneNumber ? { ...l, status: 'Called' } : l));
         setSelectedLead(null);
         setActiveCall(null);
         stopTimer();
@@ -947,6 +955,45 @@ function App() {
     }
     return Array.from(latestMap.values());
   }, [logs]);
+
+  // Helper to test if an assigned lead is called
+  const isLeadCalled = (lead) => {
+    if (!lead) return false;
+    const st = (lead.status || '').toLowerCase().trim();
+    return st === 'called' || (st !== '' && st !== 'pending');
+  };
+
+  const pendingLeadsCount = leads.filter(l => !isLeadCalled(l)).length;
+  const calledLeadsCount = leads.filter(l => isLeadCalled(l)).length;
+
+  const filteredAssignedLeads = React.useMemo(() => {
+    return leads
+      .filter(lead => {
+        if (leadStatusFilter === 'Pending') return !isLeadCalled(lead);
+        if (leadStatusFilter === 'Called') return isLeadCalled(lead);
+        return true;
+      })
+      .filter(lead => {
+        if (!leadSearchQuery.trim()) return true;
+        const q = leadSearchQuery.trim().toLowerCase();
+        const name = (lead.name || '').toLowerCase();
+        const phone = (lead.number || '').toLowerCase();
+        return name.includes(q) || phone.includes(q);
+      });
+  }, [leads, leadStatusFilter, leadSearchQuery]);
+
+  const filteredTeamLeads = React.useMemo(() => {
+    return teamLeads.filter(lead => {
+      if (!teamLeadSearchQuery.trim()) return true;
+      const q = teamLeadSearchQuery.trim().toLowerCase();
+      const num = (lead.number || '').toLowerCase();
+      const name = (lead.name || '').toLowerCase();
+      const assignedTo = (lead.assignedToName || '').toLowerCase();
+      const assignedBy = (lead.assignedByName || '').toLowerCase();
+      const st = (lead.status || '').toLowerCase();
+      return num.includes(q) || name.includes(q) || assignedTo.includes(q) || assignedBy.includes(q) || st.includes(q);
+    });
+  }, [teamLeads, teamLeadSearchQuery]);
 
   // METRICS COMPUTATIONS (Include ALL calls so total today call counts show accurately)
   const dateFilteredLatestLogs = React.useMemo(() => {
@@ -1534,39 +1581,145 @@ function App() {
               {/* COLUMN 1: LEFT SIDE - ASSIGNED LEADS */}
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <div className="stat-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', height: '1150px' }}>
-                  <h4 style={{ fontSize: '14px', marginBottom: '12px', fontWeight: 'bold' }}>Assigned Leads ({leads.length})</h4>
-                  <div className="leads-list" style={{ flex: 1, overflowY: 'auto' }}>
-                    {leads.map(lead => (
-                      <div
-                        key={lead.number}
-                        className={`lead-item ${selectedLead?.number === lead.number ? 'active' : ''}`}
-                        onClick={() => setSelectedLead(lead)}
-                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <h4 style={{ fontSize: '14px', margin: 0, fontWeight: 'bold' }}>
+                      Assigned Leads ({filteredAssignedLeads.length})
+                    </h4>
+                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      Total: {leads.length}
+                    </span>
+                  </div>
+
+                  {/* TWO FILTERS: PENDING & CALLED (+ ALL) */}
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setLeadStatusFilter('Pending')}
+                      className={`lead-filter-tab ${leadStatusFilter === 'Pending' ? 'active-pending' : ''}`}
+                    >
+                      <span>⏳ Pending</span>
+                      <span style={{
+                        background: leadStatusFilter === 'Pending' ? '#3b82f6' : 'rgba(255,255,255,0.1)',
+                        color: 'white',
+                        fontSize: '10px',
+                        padding: '1px 5px',
+                        borderRadius: '10px'
+                      }}>
+                        {pendingLeadsCount}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setLeadStatusFilter('Called')}
+                      className={`lead-filter-tab ${leadStatusFilter === 'Called' ? 'active-called' : ''}`}
+                    >
+                      <span>📞 Called</span>
+                      <span style={{
+                        background: leadStatusFilter === 'Called' ? '#10b981' : 'rgba(255,255,255,0.1)',
+                        color: 'white',
+                        fontSize: '10px',
+                        padding: '1px 5px',
+                        borderRadius: '10px'
+                      }}>
+                        {calledLeadsCount}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setLeadStatusFilter('All')}
+                      className={`lead-filter-tab ${leadStatusFilter === 'All' ? 'active-all' : ''}`}
+                      style={{ flex: '0 0 auto', padding: '7px 10px' }}
+                      title="Show All Leads"
+                    >
+                      All
+                    </button>
+                  </div>
+
+                  {/* SEARCH BAR IN ASSIGNED LEADS */}
+                  <div className="lead-search-box">
+                    <span className="lead-search-icon">🔍</span>
+                    <input
+                      type="text"
+                      className="lead-search-input"
+                      placeholder="Search by name or number..."
+                      value={leadSearchQuery}
+                      onChange={(e) => setLeadSearchQuery(e.target.value)}
+                    />
+                    {leadSearchQuery && (
+                      <button
+                        type="button"
+                        className="lead-search-clear"
+                        onClick={() => setLeadSearchQuery('')}
+                        title="Clear search"
                       >
-                        <div>
-                          <div className="lead-name">{lead.name || 'Unnamed Lead'}</div>
-                          <div className="lead-phone">
-                            📞 {lead.number}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); fetchContactHistory(lead.number); }}
-                              style={{ marginLeft: '10px', background: 'transparent', border: 'none', color: '#60a5fa', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' }}
-                            >
-                              History
-                            </button>
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  {/* LEADS LIST */}
+                  <div className="leads-list" style={{ flex: 1, overflowY: 'auto' }}>
+                    {filteredAssignedLeads.map(lead => {
+                      const isCalled = isLeadCalled(lead);
+                      return (
+                        <div
+                          key={lead.number}
+                          className={`lead-item ${selectedLead?.number === lead.number ? 'active' : ''}`}
+                          onClick={() => setSelectedLead(lead)}
+                          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                        >
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span className="lead-name">{lead.name || 'Unnamed Lead'}</span>
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  padding: '1px 6px',
+                                  borderRadius: '10px',
+                                  fontWeight: '600',
+                                  background: isCalled ? 'rgba(16, 185, 129, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                                  color: isCalled ? '#34d399' : '#60a5fa',
+                                  border: `1px solid ${isCalled ? 'rgba(16, 185, 129, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`
+                                }}
+                              >
+                                {isCalled ? 'Called' : 'Pending'}
+                              </span>
+                            </div>
+                            <div className="lead-phone">
+                              📞 {lead.number}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); fetchContactHistory(lead.number); }}
+                                style={{ marginLeft: '10px', background: 'transparent', border: 'none', color: '#60a5fa', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' }}
+                              >
+                                History
+                              </button>
+                            </div>
                           </div>
+                          {user.role !== 'Executive' && (
+                            <button
+                              onClick={(e) => handleRemoveLead(e, lead.number)}
+                              className="btn-logout"
+                              style={{ padding: '4px 8px', fontSize: '11px', borderColor: 'var(--danger)', color: 'var(--danger)', background: 'transparent' }}
+                            >
+                              Remove
+                            </button>
+                          )}
                         </div>
-                        {user.role !== 'Executive' && (
-                          <button
-                            onClick={(e) => handleRemoveLead(e, lead.number)}
-                            className="btn-logout"
-                            style={{ padding: '4px 8px', fontSize: '11px', borderColor: 'var(--danger)', color: 'var(--danger)', background: 'transparent' }}
-                          >
-                            Remove
-                          </button>
-                        )}
+                      );
+                    })}
+                    {filteredAssignedLeads.length === 0 && (
+                      <div className="empty-state" style={{ padding: '20px', textAlign: 'center' }}>
+                        {leadSearchQuery
+                          ? 'No leads matching search query.'
+                          : leadStatusFilter === 'Pending'
+                            ? 'No pending leads.'
+                            : leadStatusFilter === 'Called'
+                              ? 'No called leads yet.'
+                              : 'No assigned leads.'}
                       </div>
-                    ))}
-                    {leads.length === 0 && <div className="empty-state" style={{ padding: '20px' }}>No pending leads.</div>}
+                    )}
                   </div>
                 </div>
               </div>
@@ -1742,11 +1895,13 @@ function App() {
                         <h2>{selectedLead.name || 'Unnamed Lead'}</h2>
                         <div className="detail-phone">{selectedLead.number}</div>
                       </div>
-                      <span className="status-badge pending">Pending Call</span>
+                      <span className={`status-badge ${isLeadCalled(selectedLead) ? 'completed' : 'pending'}`}>
+                        {isLeadCalled(selectedLead) ? 'Called' : 'Pending Call'}
+                      </span>
                     </div>
                     <div className="call-action-box">
                       <button onClick={() => triggerCall(selectedLead.number, selectedLead.name)} className="btn-call">
-                        <span>📞</span> Call via Handset
+                        <span>📞</span> {isLeadCalled(selectedLead) ? 'Call Again via Handset' : 'Call via Handset'}
                       </button>
                     </div>
                   </div>
@@ -2376,8 +2531,38 @@ function App() {
                       </select>
                     </div>
                   )}
+                  {/* TEAM LEADS DIRECTORY SEARCH */}
+                  <div style={{ position: 'relative', width: '260px' }}>
+                    <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', fontSize: '13px', pointerEvents: 'none' }}>🔍</span>
+                    <input
+                      type="text"
+                      placeholder="Search directory..."
+                      value={teamLeadSearchQuery}
+                      onChange={(e) => setTeamLeadSearchQuery(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '6px 26px 6px 30px',
+                        background: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '4px',
+                        color: 'white',
+                        fontSize: '13px',
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    {teamLeadSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setTeamLeadSearchQuery('')}
+                        style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '12px' }}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                   <span className="badge-perf badge-perf-excellent" style={{ padding: '6px 12px' }}>
-                    {teamLeads.length} Leads Total
+                    {filteredTeamLeads.length}{filteredTeamLeads.length !== teamLeads.length ? ` / ${teamLeads.length}` : ''} Leads Total
                   </span>
                 </div>
               </div>
@@ -2396,7 +2581,7 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {teamLeads.map(lead => (
+                    {filteredTeamLeads.map(lead => (
                       <tr key={lead.number}>
                         <td>
                           <strong
@@ -2443,10 +2628,10 @@ function App() {
                         </td>
                       </tr>
                     ))}
-                    {teamLeads.length === 0 && (
+                    {filteredTeamLeads.length === 0 && (
                       <tr>
                         <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-secondary)' }}>
-                          No leads assigned. Sync from sheet or input manually.
+                          {teamLeadSearchQuery ? 'No leads matching search query.' : 'No leads assigned. Sync from sheet or input manually.'}
                         </td>
                       </tr>
                     )}
