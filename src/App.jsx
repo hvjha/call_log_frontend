@@ -32,6 +32,428 @@ ChartJS.register(
 const SOCKET_URL = 'https://call-log-qaq7.onrender.com';
 const API_BASE = 'https://call-log-qaq7.onrender.com';
 
+// Helper to parse pasted raw text (from Excel, Google Sheets, CSV, or multiline text)
+const parseBulkLeads = (text) => {
+  if (!text || typeof text !== 'string') return [];
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const parsed = [];
+  const seenNumbers = new Set();
+
+  for (const line of lines) {
+    let number = '';
+    let name = '';
+
+    // Check if line has delimiters: Tab (Excel/Sheets), Pipe, Dash, Comma, Semicolon
+    let parts = [];
+    if (line.includes('\t')) {
+      parts = line.split('\t').map(p => p.trim()).filter(Boolean);
+    } else if (line.includes(' | ')) {
+      parts = line.split(' | ').map(p => p.trim()).filter(Boolean);
+    } else if (line.includes(' - ')) {
+      parts = line.split(' - ').map(p => p.trim()).filter(Boolean);
+    } else if (line.includes(',') || line.includes(';')) {
+      parts = line.split(/[,;]+/).map(p => p.trim()).filter(Boolean);
+    }
+
+    if (parts.length >= 2) {
+      // Find which part contains the phone number (has 7 to 15 digits)
+      const phoneIndex = parts.findIndex(p => {
+        const d = p.replace(/\D/g, '');
+        return d.length >= 7 && d.length <= 15;
+      });
+
+      if (phoneIndex !== -1) {
+        number = parts[phoneIndex];
+        // The remaining parts form the contact name
+        name = parts.filter((_, i) => i !== phoneIndex).join(' ');
+      } else {
+        // Fallback: first part is number, rest is name
+        number = parts[0];
+        name = parts.slice(1).join(' ');
+      }
+    } else if (parts.length === 1) {
+      number = parts[0];
+      name = '';
+    } else {
+      // Space separated or single string: try regex to locate phone number
+      const phoneMatch = line.match(/(\+?\d[\d\s-]{6,14}\d)/);
+      if (phoneMatch) {
+        number = phoneMatch[1].trim();
+        name = line.replace(number, '').trim().replace(/^[-|,:]+/, '').trim();
+      } else {
+        const digits = line.replace(/\D/g, '');
+        if (digits.length >= 5) {
+          number = line.trim();
+          name = '';
+        }
+      }
+    }
+
+    // Clean up number
+    let cleanedNumber = number.replace(/["']/g, '').trim();
+    if (cleanedNumber.startsWith('+')) {
+      cleanedNumber = '+' + cleanedNumber.slice(1).replace(/\D/g, '');
+    } else {
+      cleanedNumber = cleanedNumber.replace(/\D/g, '');
+    }
+
+    const cleanedName = name.replace(/["']/g, '').trim();
+
+    if (cleanedNumber.replace(/\D/g, '').length >= 7) {
+      const normKey = cleanedNumber.replace(/\D/g, '');
+      if (!seenNumbers.has(normKey)) {
+        seenNumbers.add(normKey);
+        parsed.push({ number: cleanedNumber, name: cleanedName });
+      }
+    }
+  }
+
+  return parsed;
+};
+
+// Reusable Assign Lead Card supporting Single Lead and Bulk Allocation
+function AssignLeadCard({ title = "Assign Leads", recipients = [], recipientPlaceholder = "Select recipient...", user, apiBase, onSuccess }) {
+  const [mode, setMode] = useState('single'); // 'single' | 'bulk'
+
+  // Single mode state
+  const [singleNumber, setSingleNumber] = useState('');
+  const [singleName, setSingleName] = useState('');
+  const [singleRecipient, setSingleRecipient] = useState('');
+
+  // Bulk mode state
+  const [bulkText, setBulkText] = useState('');
+  const [bulkRecipient, setBulkRecipient] = useState('');
+  const [manualExcluded, setManualExcluded] = useState(new Set());
+
+  // Loading state
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Parsed bulk leads
+  const parsedBulkLeads = React.useMemo(() => {
+    const all = parseBulkLeads(bulkText);
+    return all.filter((_, idx) => !manualExcluded.has(idx));
+  }, [bulkText, manualExcluded]);
+
+  // Reset excluded when bulkText changes
+  useEffect(() => {
+    setManualExcluded(new Set());
+  }, [bulkText]);
+
+  const handleSingleSubmit = async (e) => {
+    e.preventDefault();
+    const cleanNum = singleNumber.trim();
+    if (!cleanNum) {
+      alert("Please enter a phone number.");
+      return;
+    }
+    if (cleanNum.replace(/\D/g, '').length < 7) {
+      alert("Please enter a valid phone number (at least 7 digits).");
+      return;
+    }
+    if (!singleRecipient) {
+      alert("Please select a recipient.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`${apiBase}/contacts/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leads: [{
+            number: cleanNum,
+            name: singleName.trim()
+          }],
+          assignedTo: singleRecipient,
+          assignedBy: user.empId
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const assignedUser = recipients.find(r => String(r.empId) === String(singleRecipient));
+        alert(`Successfully assigned lead ${singleName ? singleName + ' (' + cleanNum + ')' : cleanNum} to ${assignedUser ? assignedUser.name : singleRecipient}!`);
+        setSingleNumber('');
+        setSingleName('');
+        if (onSuccess) onSuccess();
+      } else {
+        alert(data.message || "Failed to assign lead");
+      }
+    } catch (err) {
+      alert("Error assigning lead: " + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleBulkSubmit = async (e) => {
+    e.preventDefault();
+    if (parsedBulkLeads.length === 0) {
+      alert("No valid leads found in the text. Please enter or paste numbers & names.");
+      return;
+    }
+    if (!bulkRecipient) {
+      alert("Please select a recipient.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`${apiBase}/contacts/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leads: parsedBulkLeads,
+          assignedTo: bulkRecipient,
+          assignedBy: user.empId
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const assignedUser = recipients.find(r => String(r.empId) === String(bulkRecipient));
+        alert(`Successfully assigned ${parsedBulkLeads.length} leads to ${assignedUser ? assignedUser.name : bulkRecipient}!`);
+        setBulkText('');
+        setManualExcluded(new Set());
+        if (onSuccess) onSuccess();
+      } else {
+        alert(data.message || "Failed to assign bulk contacts");
+      }
+    } catch (err) {
+      alert("Error assigning bulk contacts: " + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRemoveParsedItem = (idx) => {
+    setManualExcluded(prev => {
+      const next = new Set(prev);
+      next.add(idx);
+      return next;
+    });
+  };
+
+  return (
+    <div className="stat-card" style={{ padding: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+        <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0, color: 'var(--success)' }}>{title}</h3>
+        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+          {mode === 'single' ? 'Single Mode' : 'Bulk Mode'}
+        </span>
+      </div>
+
+      {/* Segmented Mode Selector */}
+      <div className="assign-mode-toggle">
+        <button
+          type="button"
+          onClick={() => setMode('single')}
+          className={`assign-mode-btn ${mode === 'single' ? 'active' : ''}`}
+        >
+          👤 Single Lead
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('bulk')}
+          className={`assign-mode-btn ${mode === 'bulk' ? 'active' : ''}`}
+        >
+          📋 Bulk Allocation
+        </button>
+      </div>
+
+      {mode === 'single' ? (
+        <form onSubmit={handleSingleSubmit}>
+          <div className="form-group" style={{ marginBottom: '12px' }}>
+            <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <span>Phone Number</span>
+              <span style={{ fontSize: '11px', color: 'var(--danger)' }}>*Required</span>
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. +91 9876543210"
+              value={singleNumber}
+              onChange={(e) => setSingleNumber(e.target.value)}
+              className="form-input"
+              style={{ padding: '9px 12px', fontSize: '13px' }}
+              required
+            />
+          </div>
+
+          <div className="form-group" style={{ marginBottom: '12px' }}>
+            <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <span>Contact Name</span>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Optional</span>
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Rahul Sharma"
+              value={singleName}
+              onChange={(e) => setSingleName(e.target.value)}
+              className="form-input"
+              style={{ padding: '9px 12px', fontSize: '13px' }}
+            />
+          </div>
+
+          <div className="form-group" style={{ marginBottom: '16px' }}>
+            <label className="form-label" style={{ marginBottom: '6px' }}>Assign To</label>
+            <select
+              value={singleRecipient}
+              onChange={(e) => setSingleRecipient(e.target.value)}
+              className="filter-select"
+              style={{ width: '100%', padding: '9px 12px', fontSize: '13px' }}
+              required
+            >
+              <option value="">{recipientPlaceholder}</option>
+              {recipients.map(m => (
+                <option key={m.empId} value={m.empId}>{m.name} ({m.role})</option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="submit"
+            className="btn-primary"
+            disabled={isSubmitting}
+            style={{ padding: '11px', fontSize: '13px', fontWeight: '600' }}
+          >
+            {isSubmitting ? 'Assigning...' : '👤 Assign Single Lead'}
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={handleBulkSubmit}>
+          <div className="form-group" style={{ marginBottom: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <label className="form-label" style={{ margin: 0 }}>
+                Paste Numbers & Names
+              </label>
+              {parsedBulkLeads.length > 0 && (
+                <span style={{
+                  fontSize: '11px',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  color: '#34d399',
+                  fontWeight: '600',
+                  border: '1px solid rgba(16, 185, 129, 0.3)'
+                }}>
+                  ✓ {parsedBulkLeads.length} leads detected
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '8px', lineHeight: '1.4' }}>
+              💡 Copy & paste rows directly from Excel/Sheets (<span style={{ color: '#93c5fd' }}>Number [Tab] Name</span> or <span style={{ color: '#93c5fd' }}>Name [Tab] Number</span>), comma separated, or one per line.
+            </div>
+            <textarea
+              placeholder={`9876543210\tRahul Sharma\n9876543211\tPriya Verma\n+91 9876543212, Amit Kumar`}
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+              className="form-input"
+              rows="5"
+              style={{
+                padding: '9px 12px',
+                resize: 'vertical',
+                fontFamily: 'monospace',
+                fontSize: '12px',
+                lineHeight: '1.5'
+              }}
+              required
+            />
+          </div>
+
+          {/* Parsed Preview Table */}
+          {parsedBulkLeads.length > 0 && (
+            <div className="assign-preview-container">
+              <div className="assign-preview-header">
+                <span>Parsed Preview ({parsedBulkLeads.length})</span>
+                <span style={{ fontSize: '10px', color: '#93c5fd' }}>Ready to assign</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {parsedBulkLeads.map((item, idx) => (
+                  <div key={idx} className="assign-preview-item">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '11px', width: '20px' }}>#{idx + 1}</span>
+                      <span style={{ color: '#60a5fa', fontWeight: '600', fontFamily: 'monospace' }}>{item.number}</span>
+                      <span style={{
+                        color: item.name ? '#e2e8f0' : 'var(--text-secondary)',
+                        fontStyle: item.name ? 'normal' : 'italic',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        maxWidth: '120px'
+                      }}>
+                        {item.name ? `— ${item.name}` : '(No name)'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveParsedItem(idx)}
+                      title="Remove this lead from batch"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        padding: '0 4px',
+                        lineHeight: 1
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="form-group" style={{ marginBottom: '16px' }}>
+            <label className="form-label" style={{ marginBottom: '6px' }}>Assign To</label>
+            <select
+              value={bulkRecipient}
+              onChange={(e) => setBulkRecipient(e.target.value)}
+              className="filter-select"
+              style={{ width: '100%', padding: '9px 12px', fontSize: '13px' }}
+              required
+            >
+              <option value="">{recipientPlaceholder}</option>
+              {recipients.map(m => (
+                <option key={m.empId} value={m.empId}>{m.name} ({m.role})</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {bulkText && (
+              <button
+                type="button"
+                onClick={() => { setBulkText(''); setManualExcluded(new Set()); }}
+                className="btn-logout"
+                style={{ padding: '11px 14px', fontSize: '12px', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}
+              >
+                Clear
+              </button>
+            )}
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={isSubmitting || parsedBulkLeads.length === 0}
+              style={{
+                flex: 1,
+                padding: '11px',
+                fontSize: '13px',
+                fontWeight: '600',
+                opacity: (isSubmitting || parsedBulkLeads.length === 0) ? 0.6 : 1,
+                cursor: (isSubmitting || parsedBulkLeads.length === 0) ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {isSubmitting ? 'Assigning...' : `📋 Assign ${parsedBulkLeads.length > 0 ? parsedBulkLeads.length : ''} Bulk Contacts`}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
 function App() {
   const [user, setUser] = useState(null);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
@@ -2314,41 +2736,17 @@ function App() {
 
               {/* Assign Leads Form (Manager & TL only) */}
               {(user.role === 'Manager' || user.role === 'TL') && (
-                <div className="stat-card" style={{ padding: '20px' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '15px', color: 'var(--success)' }}>Assign Leads</h3>
-                  <form onSubmit={handleAssignLeads}>
-                    <div className="form-group" style={{ marginBottom: '12px' }}>
-                      <label className="form-label">Phone Numbers</label>
-                      <textarea
-                        placeholder="Enter phone numbers (one per line or separated by commas)"
-                        value={assignForm.numbersText}
-                        onChange={(e) => setAssignForm({ ...assignForm, numbersText: e.target.value })}
-                        className="form-input"
-                        rows="4"
-                        style={{ padding: '10px 12px', resize: 'vertical' }}
-                        required
-                      />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: '15px' }}>
-                      <label className="form-label">Assign To</label>
-                      <select
-                        value={assignForm.assignedTo}
-                        onChange={(e) => setAssignForm({ ...assignForm, assignedTo: e.target.value })}
-                        className="filter-select"
-                        style={{ width: '100%', padding: '10px' }}
-                        required
-                      >
-                        <option value="">Select subordinate...</option>
-                        {teamMembers.map(m => (
-                          <option key={m.empId} value={m.empId}>{m.name} ({m.role})</option>
-                        ))}
-                      </select>
-                    </div>
-                    <button type="submit" className="btn-primary" style={{ padding: '12px', fontSize: '14px' }}>
-                      Assign Contacts
-                    </button>
-                  </form>
-                </div>
+                <AssignLeadCard
+                  title="Assign Leads"
+                  recipients={teamMembers}
+                  recipientPlaceholder="Select subordinate..."
+                  user={user}
+                  apiBase={API_BASE}
+                  onSuccess={() => {
+                    fetchLeads();
+                    fetchTeamLeads();
+                  }}
+                />
               )}
 
               {/* Add User Control Card */}
@@ -2465,41 +2863,17 @@ function App() {
           <div style={{ display: 'grid', gridTemplateColumns: '350px minmax(0, 1fr)', gap: '20px', width: '100%', alignItems: 'start' }}>
             {/* LEFT CONTROL PANEL - LEADS TAB */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div className="stat-card" style={{ padding: '20px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '15px', color: 'var(--success)' }}>Assign New Leads</h3>
-                <form onSubmit={handleAssignLeads}>
-                  <div className="form-group" style={{ marginBottom: '12px' }}>
-                    <label className="form-label">Phone Numbers</label>
-                    <textarea
-                      placeholder="Enter phone numbers (one per line or separated by commas)"
-                      value={assignForm.numbersText}
-                      onChange={(e) => setAssignForm({ ...assignForm, numbersText: e.target.value })}
-                      className="form-input"
-                      rows="5"
-                      style={{ padding: '10px 12px', resize: 'vertical' }}
-                      required
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: '15px' }}>
-                    <label className="form-label">Assign To</label>
-                    <select
-                      value={assignForm.assignedTo}
-                      onChange={(e) => setAssignForm({ ...assignForm, assignedTo: e.target.value })}
-                      className="filter-select"
-                      style={{ width: '100%', padding: '10px' }}
-                      required
-                    >
-                      <option value="">Select recipient...</option>
-                      {allUsers.map(m => (
-                        <option key={m.empId} value={m.empId}>{m.name} ({m.role})</option>
-                      ))}
-                    </select>
-                  </div>
-                  <button type="submit" className="btn-primary" style={{ padding: '12px', fontSize: '14px' }}>
-                    Assign Contacts
-                  </button>
-                </form>
-              </div>
+              <AssignLeadCard
+                title="Assign New Leads"
+                recipients={allUsers}
+                recipientPlaceholder="Select recipient..."
+                user={user}
+                apiBase={API_BASE}
+                onSuccess={() => {
+                  fetchLeads();
+                  fetchTeamLeads();
+                }}
+              />
 
               <div className="stat-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--accent-primary)' }}>Google Sheet Integration</h3>
