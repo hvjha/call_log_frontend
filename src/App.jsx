@@ -737,17 +737,20 @@ function App() {
         method: 'POST'
       });
       const data = await res.json();
-      if (data.success) {
+      if (data && data.success) {
         setSyncStatus('Sync complete!');
         if (user.role === 'Executive') {
           fetchLeads();
         }
         fetchLogs();
       } else {
-        setSyncStatus('Sync failed: ' + data.message);
+        const errorMsg = data?.message || 'Failed to sync leads from sheet';
+        setSyncStatus('Sync failed');
+        alert('Google Sheet Sync Error:\n' + errorMsg);
       }
     } catch (e) {
       setSyncStatus('Sync error');
+      alert('Network or server connection error while syncing from sheet: ' + e.message);
     }
     setTimeout(() => setSyncStatus(''), 4000);
   };
