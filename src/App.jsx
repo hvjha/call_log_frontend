@@ -552,15 +552,18 @@ function App() {
 
   // Read saved user session from localStorage on startup
   useEffect(() => {
-    const savedUser = localStorage.getItem('crm_user');
-    if (savedUser) {
-      const parsed = JSON.parse(savedUser);
-      setUser(parsed);
-      if (parsed.role === 'Admin') {
-        setSelectedMember('All');
-      } else {
-        setSelectedMember('All');
+    try {
+      const savedUser = localStorage.getItem('crm_user');
+      if (savedUser && savedUser !== 'undefined' && savedUser !== 'null') {
+        const parsed = JSON.parse(savedUser);
+        if (parsed && typeof parsed === 'object') {
+          setUser(parsed);
+          setSelectedMember('All');
+        }
       }
+    } catch (err) {
+      console.warn('Invalid user session in localStorage, clearing:', err);
+      localStorage.removeItem('crm_user');
     }
   }, []);
 
@@ -1331,7 +1334,7 @@ function App() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `JJ_CRM_Report_${Date.now()}.csv`);
+    link.setAttribute("download", `JJ_Call_CRM_Report_${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1449,12 +1452,22 @@ function App() {
 
       let matchesStatus = true;
       if (statusFilter !== 'All') {
-        if (statusFilter === 'effective') {
-          const statusLower = (log.status || '').toLowerCase().trim();
-          const unconnected = ['busy', 'not answering', 'no answer', 'missed', 'rejected', 'unconnected'];
-          matchesStatus = Number(log.duration || 0) > 0 && !unconnected.includes(statusLower);
+        const statusLower = (log.status || '').toLowerCase().trim();
+        const unconnected = ['busy', 'not answering', 'no answer', 'missed', 'rejected', 'unconnected'];
+        const isConnected = Number(log.duration || 0) > 0 && !unconnected.includes(statusLower);
+
+        if (statusFilter === 'effective' || statusFilter === 'connected') {
+          matchesStatus = isConnected;
         } else if (statusFilter === 'Enquiry') {
           matchesStatus = log.enquiryReceived && log.enquiryReceived.toLowerCase() === 'yes';
+        } else if (statusFilter === 'missed_busy') {
+          matchesStatus = unconnected.includes(statusLower) || Number(log.duration || 0) === 0;
+        } else if (statusFilter === 'under1min') {
+          matchesStatus = isConnected && Number(log.duration || 0) < 60;
+        } else if (statusFilter === '1to3min') {
+          matchesStatus = isConnected && Number(log.duration || 0) >= 60 && Number(log.duration || 0) <= 180;
+        } else if (statusFilter === 'over3min') {
+          matchesStatus = isConnected && Number(log.duration || 0) > 180;
         } else if (statusFilter === 'under30') {
           matchesStatus = Number(log.duration || 0) <= 30;
         } else if (statusFilter === 'over30') {
@@ -1469,17 +1482,48 @@ function App() {
   }, [dateFilteredLatestLogs, searchQuery, selectedCategory, statusFilter]);
 
   const totalCalls = dateFilteredLatestLogs.length;
+  const interestedCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'interested').length;
+  const notInterestedCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'not interested').length;
+  const followUpCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'follow up').length;
+  const missedBusyCalls = dateFilteredLatestLogs.filter(l => {
+    const s = (l.status || '').toLowerCase().trim();
+    return ['busy', 'not answering', 'no answer', 'missed', 'rejected', 'unconnected'].includes(s);
+  }).length;
+  const prospectCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'prospect').length;
+  const enquiryCalls = dateFilteredLatestLogs.filter(l => l.enquiryReceived && l.enquiryReceived.toLowerCase() === 'yes').length;
   const effectiveCalls = dateFilteredLatestLogs.filter(l => {
     const statusLower = (l.status || '').toLowerCase().trim();
     const unconnected = ['busy', 'not answering', 'no answer', 'missed', 'rejected', 'unconnected'];
     return Number(l.duration || 0) > 0 && !unconnected.includes(statusLower);
   }).length;
-  const interestedCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'interested').length;
-  const followUpCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'follow up').length;
-  const prospectCalls = dateFilteredLatestLogs.filter(l => l.status && l.status.toLowerCase() === 'prospect').length;
-  const enquiryCalls = dateFilteredLatestLogs.filter(l => l.enquiryReceived && l.enquiryReceived.toLowerCase() === 'yes').length;
   const under30Calls = dateFilteredLatestLogs.filter(l => Number(l.duration || 0) <= 30).length;
   const over30Calls = dateFilteredLatestLogs.filter(l => Number(l.duration || 0) > 30).length;
+
+  // Connected Duration Calculations (Call Duration Report Card)
+  const connectedLogs = dateFilteredLatestLogs.filter(l => {
+    const statusLower = (l.status || '').toLowerCase().trim();
+    const unconnected = ['busy', 'not answering', 'no answer', 'missed', 'rejected', 'unconnected'];
+    return Number(l.duration || 0) > 0 && !unconnected.includes(statusLower);
+  });
+  const totalConnectedCalls = connectedLogs.length;
+  const under1MinCalls = connectedLogs.filter(l => Number(l.duration || 0) < 60).length;
+  const oneToThreeMinCalls = connectedLogs.filter(l => Number(l.duration || 0) >= 60 && Number(l.duration || 0) <= 180).length;
+  const overThreeMinCalls = connectedLogs.filter(l => Number(l.duration || 0) > 180).length;
+  const totalTalkTimeSec = connectedLogs.reduce((acc, l) => acc + Number(l.duration || 0), 0);
+  const avgDurationSec = totalConnectedCalls > 0 ? Math.round(totalTalkTimeSec / totalConnectedCalls) : 0;
+
+  const getConnectedPct = (count) => {
+    if (totalConnectedCalls === 0) return '0%';
+    return `${Math.round((count / totalConnectedCalls) * 100)}%`;
+  };
+
+  const formatMMSS = (totalSeconds) => {
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    const mm = m < 10 ? `0${m}` : `${m}`;
+    const ss = s < 10 ? `0${s}` : `${s}`;
+    return `${mm}:${ss}`;
+  };
 
   // Percentage Calculations
   const getPercentage = (count) => {
@@ -1671,9 +1715,23 @@ function App() {
     return (
       <div className="auth-wrapper">
         <div className="auth-card">
-          <div className="auth-header">
-            <h1 className="auth-logo">JJ CRM</h1>
-            <p className="auth-subtitle">Real-Time Phone Call & Lead Integration</p>
+          <div className="auth-header" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>
+            <img
+              src="/logo.png"
+              alt="JJ Group Logo"
+              style={{
+                width: '84px',
+                height: '84px',
+                objectFit: 'contain',
+                borderRadius: '12px',
+                marginBottom: '12px',
+                background: '#ffffff',
+                padding: '6px',
+                boxShadow: '0 6px 20px rgba(0, 0, 0, 0.4)'
+              }}
+            />
+            <h1 className="auth-logo" style={{ margin: 0, fontSize: '26px', fontWeight: 800 }}>JJ Call CRM</h1>
+            <p className="auth-subtitle" style={{ marginTop: '4px' }}>Real-Time Phone Call & Lead Integration</p>
           </div>
           {error && <div className="auth-error">{error}</div>}
           <form onSubmit={handleLogin}>
@@ -1711,8 +1769,21 @@ function App() {
   return (
     <div className="app-container">
       <header className="dashboard-header">
-        <div className="header-logo">
-          <span>⚡</span> JJ CRM
+        <div className="header-logo" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <img
+            src="/logo.png"
+            alt="JJ Group Logo"
+            style={{
+              width: '36px',
+              height: '36px',
+              objectFit: 'contain',
+              borderRadius: '8px',
+              background: '#ffffff',
+              padding: '2px',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)'
+            }}
+          />
+          <span style={{ fontWeight: 800, letterSpacing: '0.5px' }}>JJ Call CRM</span>
         </div>
         <div className="user-profile">
           {user.role !== 'Executive' && (
@@ -1778,11 +1849,11 @@ function App() {
 
           {dateFilter === 'Select Date' && (
             <div className="filter-group">
-              <input 
-                type="date" 
-                value={selectedDate} 
-                onClick={(e) => { try { e.target.showPicker && e.target.showPicker(); } catch(err){} }}
-                onChange={(e) => setSelectedDate(e.target.value)} 
+              <input
+                type="date"
+                value={selectedDate}
+                onClick={(e) => { try { e.target.showPicker && e.target.showPicker(); } catch (err) { } }}
+                onChange={(e) => setSelectedDate(e.target.value)}
                 className="filter-input"
                 style={{ cursor: 'pointer', background: '#1e293b', border: '1px solid var(--info)', color: 'white', fontWeight: 'bold' }}
               />
@@ -1876,54 +1947,213 @@ function App() {
                 </div>
               </div>
 
-              {/* STATS CARDS ROW (6 CARDS FILLING THE REMAINING WIDTH) */}
-              <div className="stats-row" style={{ flex: 1 }}>
-                {user.role !== 'Executive' && (
-                  <div className={`stat-card stat-card-total ${statusFilter === 'All' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('All')}>
-                    <div className="stat-val">{totalCalls}</div>
-                    <div className="stat-label">Total Calls</div>
+              {/* STATS CARDS GRID (MATCHING IMAGE 1) */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="stats-row">
+                  {/* Card 1: Total Calls */}
+                  <div
+                    className={`stat-card stat-card-total ${statusFilter === 'All' ? 'active-filter' : ''}`}
+                    onClick={() => setStatusFilter('All')}
+                    style={{ border: '1px solid #3b82f6', borderRadius: '10px', padding: '16px' }}
+                  >
+                    <div className="stat-val" style={{ color: '#60a5fa', fontSize: '28px', fontWeight: '800' }}>{totalCalls}</div>
+                    <div className="stat-label" style={{ fontWeight: '700', textTransform: 'uppercase', fontSize: '11px' }}>
+                      TOTAL CALLS
+                    </div>
                   </div>
-                )}
-                <div className={`stat-card ${statusFilter === 'effective' ? 'active-filter' : ''}`} style={{ borderLeft: '4px solid #3b82f6', cursor: 'pointer' }} onClick={() => setStatusFilter('effective')}>
-                  <div className="stat-val" style={{ color: '#60a5fa' }}>{effectiveCalls}</div>
-                  <div className="stat-label">
-                    <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(effectiveCalls)})</span> Effective (&gt; 0s)
+
+                  {/* Card 2: Interested */}
+                  <div
+                    className={`stat-card stat-card-interested ${statusFilter === 'Interested' ? 'active-filter' : ''}`}
+                    onClick={() => setStatusFilter('Interested')}
+                    style={{ border: '1px solid #10b981', borderRadius: '10px', padding: '16px' }}
+                  >
+                    <div className="stat-val" style={{ color: '#34d399', fontSize: '28px', fontWeight: '800' }}>{interestedCalls}</div>
+                    <div className="stat-label" style={{ fontWeight: '700', textTransform: 'uppercase', fontSize: '11px' }}>
+                      <span style={{ opacity: 0.85, marginRight: '4px' }}>({getPercentage(interestedCalls)})</span> INTERESTED
+                    </div>
+                  </div>
+
+                  {/* Card 3: Not Interested */}
+                  <div
+                    className={`stat-card stat-card-not-interested ${statusFilter === 'Not Interested' ? 'active-filter' : ''}`}
+                    onClick={() => setStatusFilter('Not Interested')}
+                    style={{ border: '1px solid #64748b', borderRadius: '10px', padding: '16px' }}
+                  >
+                    <div className="stat-val" style={{ color: '#94a3b8', fontSize: '28px', fontWeight: '800' }}>{notInterestedCalls}</div>
+                    <div className="stat-label" style={{ fontWeight: '700', textTransform: 'uppercase', fontSize: '11px' }}>
+                      <span style={{ opacity: 0.85, marginRight: '4px' }}>({getPercentage(notInterestedCalls)})</span> NOT INTERESTED
+                    </div>
+                  </div>
+
+                  {/* Card 4: Follow Up */}
+                  <div
+                    className={`stat-card stat-card-followup ${statusFilter === 'Follow Up' ? 'active-filter' : ''}`}
+                    onClick={() => setStatusFilter('Follow Up')}
+                    style={{ border: '1px solid #f59e0b', borderRadius: '10px', padding: '16px' }}
+                  >
+                    <div className="stat-val" style={{ color: '#fbbf24', fontSize: '28px', fontWeight: '800' }}>{followUpCalls}</div>
+                    <div className="stat-label" style={{ fontWeight: '700', textTransform: 'uppercase', fontSize: '11px' }}>
+                      <span style={{ opacity: 0.85, marginRight: '4px' }}>({getPercentage(followUpCalls)})</span> FOLLOW UP
+                    </div>
+                  </div>
+
+                  {/* Card 5: Missed / Busy */}
+                  <div
+                    className={`stat-card stat-card-missed ${statusFilter === 'missed_busy' ? 'active-filter' : ''}`}
+                    onClick={() => setStatusFilter('missed_busy')}
+                    style={{ border: '1px solid #ef4444', borderRadius: '10px', padding: '16px' }}
+                  >
+                    <div className="stat-val" style={{ color: '#f87171', fontSize: '28px', fontWeight: '800' }}>{missedBusyCalls}</div>
+                    <div className="stat-label" style={{ fontWeight: '700', textTransform: 'uppercase', fontSize: '11px' }}>
+                      <span style={{ opacity: 0.85, marginRight: '4px' }}>({getPercentage(missedBusyCalls)})</span> MISSED / BUSY
+                    </div>
+                  </div>
+
+                  {/* Card 6: Prospect */}
+                  <div
+                    className={`stat-card stat-card-prospect ${statusFilter === 'Prospect' ? 'active-filter' : ''}`}
+                    onClick={() => setStatusFilter('Prospect')}
+                    style={{ border: '1px solid #c084fc', borderRadius: '10px', padding: '16px' }}
+                  >
+                    <div className="stat-val" style={{ color: '#f472b6', fontSize: '28px', fontWeight: '800' }}>{prospectCalls}</div>
+                    <div className="stat-label" style={{ fontWeight: '700', textTransform: 'uppercase', fontSize: '11px' }}>
+                      <span style={{ opacity: 0.85, marginRight: '4px' }}>({getPercentage(prospectCalls)})</span> PROSPECT
+                    </div>
                   </div>
                 </div>
-                <div className={`stat-card stat-card-interested ${statusFilter === 'Interested' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('Interested')}>
-                  <div className="stat-val">{interestedCalls}</div>
-                  <div className="stat-label">
-                    <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(interestedCalls)})</span> Interested
+
+                {/* Second Row: Enquiry Received */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '14px' }}>
+                  <div
+                    className={`stat-card stat-card-enquiry ${statusFilter === 'Enquiry' ? 'active-filter' : ''}`}
+                    onClick={() => setStatusFilter('Enquiry')}
+                    style={{ border: '1px solid #10b981', borderRadius: '10px', padding: '16px' }}
+                  >
+                    <div className="stat-val" style={{ color: '#059669', fontSize: '28px', fontWeight: '800' }}>{enquiryCalls}</div>
+                    <div className="stat-label" style={{ fontWeight: '700', textTransform: 'uppercase', fontSize: '11px' }}>
+                      <span style={{ opacity: 0.85, marginRight: '4px' }}>({getPercentage(enquiryCalls)})</span> ENQUIRY RECEIVED
+                    </div>
                   </div>
                 </div>
-                <div className={`stat-card stat-card-followup ${statusFilter === 'Follow Up' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('Follow Up')}>
-                  <div className="stat-val">{followUpCalls}</div>
-                  <div className="stat-label">
-                    <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(followUpCalls)})</span> Follow Up
+              </div>
+            </div>
+
+            {/* CALL DURATION REPORT CARD (MATCHING IMAGE 1) */}
+            <div
+              className="stat-card"
+              style={{
+                padding: '20px 24px',
+                width: '100%',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '12px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px' }}>
+                <span style={{ fontSize: '18px' }}>⏱️</span>
+                <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0, color: 'white' }}>
+                  Call Duration Report Card
+                </h3>
+                <span style={{ fontSize: '13px', color: 'var(--text-secondary)', marginLeft: '6px' }}>
+                  (Connected: <strong style={{ color: 'white' }}>{totalConnectedCalls}</strong> | Avg Duration: <strong style={{ color: '#60a5fa' }}>{formatMMSS(avgDurationSec)}</strong>)
+                </span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+                {/* 1: < 1 Min */}
+                <div
+                  onClick={() => setStatusFilter(statusFilter === 'under1min' ? 'All' : 'under1min')}
+                  className={`duration-subcard ${statusFilter === 'under1min' ? 'active' : ''}`}
+                  style={{
+                    background: statusFilter === 'under1min' ? 'rgba(245, 158, 11, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid rgba(255, 255, 255, 0.07)',
+                    borderBottom: '3px solid #f59e0b',
+                    borderRadius: '10px',
+                    padding: '16px 20px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{ fontSize: '28px', fontWeight: '800', color: '#f59e0b', marginBottom: '6px' }}>
+                    {under1MinCalls}
+                  </div>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: 'white', textTransform: 'uppercase', marginBottom: '4px' }}>
+                    ({getConnectedPct(under1MinCalls)}) &lt; 1 MIN CALL
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    Quick connects / Brief chats (&lt; 60s)
                   </div>
                 </div>
-                <div className={`stat-card ${statusFilter === 'under30' ? 'active-filter' : ''}`} style={{ borderLeft: '4px solid #f59e0b', cursor: 'pointer' }} onClick={() => setStatusFilter('under30')}>
-                  <div className="stat-val" style={{ color: '#f59e0b' }}>{under30Calls}</div>
-                  <div className="stat-label">
-                    <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(under30Calls)})</span> Duration &lt; 30s
+
+                {/* 2: 1 to 3 Min */}
+                <div
+                  onClick={() => setStatusFilter(statusFilter === '1to3min' ? 'All' : '1to3min')}
+                  className={`duration-subcard ${statusFilter === '1to3min' ? 'active' : ''}`}
+                  style={{
+                    background: statusFilter === '1to3min' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid rgba(255, 255, 255, 0.07)',
+                    borderBottom: '3px solid #3b82f6',
+                    borderRadius: '10px',
+                    padding: '16px 20px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{ fontSize: '28px', fontWeight: '800', color: '#60a5fa', marginBottom: '6px' }}>
+                    {oneToThreeMinCalls}
+                  </div>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: 'white', textTransform: 'uppercase', marginBottom: '4px' }}>
+                    ({getConnectedPct(oneToThreeMinCalls)}) 1 MIN TO 3 MIN CALL
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    Standard conversations (60s - 180s)
                   </div>
                 </div>
-                <div className={`stat-card ${statusFilter === 'over30' ? 'active-filter' : ''}`} style={{ borderLeft: '4px solid #10b981', cursor: 'pointer' }} onClick={() => setStatusFilter('over30')}>
-                  <div className="stat-val" style={{ color: '#10b981' }}>{over30Calls}</div>
-                  <div className="stat-label">
-                    <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(over30Calls)})</span> Duration &gt; 30s
+
+                {/* 3: 3 Min + */}
+                <div
+                  onClick={() => setStatusFilter(statusFilter === 'over3min' ? 'All' : 'over3min')}
+                  className={`duration-subcard ${statusFilter === 'over3min' ? 'active' : ''}`}
+                  style={{
+                    background: statusFilter === 'over3min' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid rgba(255, 255, 255, 0.07)',
+                    borderBottom: '3px solid #10b981',
+                    borderRadius: '10px',
+                    padding: '16px 20px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{ fontSize: '28px', fontWeight: '800', color: '#10b981', marginBottom: '6px' }}>
+                    {overThreeMinCalls}
+                  </div>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: 'white', textTransform: 'uppercase', marginBottom: '4px' }}>
+                    ({getConnectedPct(overThreeMinCalls)}) 3 MIN + CALL
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    In-depth consultations (&gt; 180s)
                   </div>
                 </div>
-                <div className={`stat-card stat-card-prospect ${statusFilter === 'Prospect' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('Prospect')}>
-                  <div className="stat-val">{prospectCalls}</div>
-                  <div className="stat-label">
-                    <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(prospectCalls)})</span> Prospect
+
+                {/* 4: Total Connected Calls */}
+                <div
+                  onClick={() => setStatusFilter(statusFilter === 'connected' ? 'All' : 'connected')}
+                  className={`duration-subcard ${statusFilter === 'connected' ? 'active' : ''}`}
+                  style={{
+                    background: statusFilter === 'connected' ? 'rgba(168, 85, 247, 0.15)' : 'rgba(168, 85, 247, 0.05)',
+                    border: '1px solid rgba(168, 85, 247, 0.3)',
+                    borderRadius: '10px',
+                    padding: '16px 20px',
+                    cursor: 'pointer',
+                    boxShadow: '0 0 15px rgba(168, 85, 247, 0.15)'
+                  }}
+                >
+                  <div style={{ fontSize: '28px', fontWeight: '800', color: '#c084fc', marginBottom: '6px' }}>
+                    {totalConnectedCalls}
                   </div>
-                </div>
-                <div className={`stat-card stat-card-enquiry ${statusFilter === 'Enquiry' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('Enquiry')}>
-                  <div className="stat-val">{enquiryCalls}</div>
-                  <div className="stat-label">
-                    <span style={{ opacity: 0.8, marginRight: '4px' }}>({getPercentage(enquiryCalls)})</span> Enquiry Received
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: 'white', textTransform: 'uppercase', marginBottom: '4px' }}>
+                    TOTAL CONNECTED CALLS
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#d8b4fe' }}>
+                    Total Talk Time: {formatMMSS(totalTalkTimeSec)}
                   </div>
                 </div>
               </div>
@@ -2400,53 +2630,128 @@ function App() {
                   </div>
                 </div>
 
-                {/* HOURLY PERFORMANCE REPORT TABLE */}
-                {user.role !== 'Executive' && (
-                  <div className="hourly-report-card">
-                    <h3 className="hourly-report-header">
-                      📈 Hourly Performance (Daily Target: 30 | Active Days: {numDays})
-                    </h3>
-                    <div className="table-wrapper hourly-table-wrapper" style={{ maxHeight: '750px' }}>
-                      <table className="logs-table" style={{ minWidth: '700px' }}>
-                        <thead>
-                          <tr>
-                            <th>Time Slot</th>
-                            <th>Planned Calls</th>
-                            <th>Actual Calls</th>
-                            <th>Achievement</th>
-                            <th>Performance Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {hourlyPerformance.map(row => (
-                            <tr key={row.label}>
-                              <td><strong>{row.label}</strong></td>
-                              <td>{row.planned}</td>
-                              <td><strong>{row.actual}</strong></td>
-                              <td>{row.achievementPct}%</td>
-                              <td>
-                                <span className={`badge-perf ${row.statusClass}`}>
-                                  {row.status}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                          <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderTop: '2px solid rgba(255, 255, 255, 0.15)' }}>
-                            <td><strong>Total Summary</strong></td>
-                            <td><strong>{totalPlanned}</strong></td>
-                            <td><strong>{totalActual}</strong></td>
-                            <td><strong>{totalAchievementPct}%</strong></td>
+                {/* HOURLY PERFORMANCE REPORT TABLE & CONNECTED DURATION (NOW VISIBLE IN EXECUTIVE DASHBOARD) */}
+                <div className="hourly-report-card">
+                  <h3 className="hourly-report-header" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                    <span>📈</span> Hourly Performance (Daily Target: 30 | Active Days: {numDays})
+                  </h3>
+                  <div className="table-wrapper hourly-table-wrapper" style={{ maxHeight: '750px' }}>
+                    <table className="logs-table" style={{ minWidth: '700px' }}>
+                      <thead>
+                        <tr>
+                          <th>Time Slot</th>
+                          <th>Planned Calls</th>
+                          <th>Actual Calls</th>
+                          <th>Achievement</th>
+                          <th>Performance Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {hourlyPerformance.map(row => (
+                          <tr key={row.label}>
+                            <td><strong>{row.label}</strong></td>
+                            <td>{row.planned}</td>
+                            <td><strong>{row.actual}</strong></td>
+                            <td>{row.achievementPct}%</td>
                             <td>
-                              <span className={`badge-perf ${overallPerf.className}`}>
-                                {overallPerf.label}
+                              <span className={`badge-perf ${row.statusClass}`}>
+                                {row.status}
                               </span>
                             </td>
                           </tr>
-                        </tbody>
-                      </table>
+                        ))}
+                        <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderTop: '2px solid rgba(255, 255, 255, 0.15)' }}>
+                          <td><strong>Total Summary</strong></td>
+                          <td><strong>{totalPlanned}</strong></td>
+                          <td><strong>{totalActual}</strong></td>
+                          <td><strong>{totalAchievementPct}%</strong></td>
+                          <td>
+                            <span className={`badge-perf ${overallPerf.className}`}>
+                              {overallPerf.label}
+                            </span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* CONNECTED CALL DURATION REPORT (MATCHING IMAGE 2) */}
+                  <div style={{ marginTop: '24px', paddingTop: '18px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 'bold', color: 'white' }}>
+                        <span>⏱️</span> Connected Call Duration Report
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        Avg: <strong style={{ color: '#60a5fa' }}>{formatMMSS(avgDurationSec)}</strong>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+                      {/* < 1 Min */}
+                      <div
+                        onClick={() => setStatusFilter(statusFilter === 'under1min' ? 'All' : 'under1min')}
+                        style={{
+                          border: '1px solid #f59e0b',
+                          borderRadius: '8px',
+                          padding: '14px',
+                          textAlign: 'center',
+                          cursor: 'pointer',
+                          background: statusFilter === 'under1min' ? 'rgba(245, 158, 11, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <div style={{ fontSize: '22px', fontWeight: '800', color: '#f59e0b', marginBottom: '4px' }}>
+                          {under1MinCalls}
+                        </div>
+                        <div style={{ fontSize: '11px', fontWeight: 'bold', color: 'white' }}>
+                          &lt; 1 MIN CALL ({getConnectedPct(under1MinCalls)})
+                        </div>
+                      </div>
+
+                      {/* 1 To 3 Min */}
+                      <div
+                        onClick={() => setStatusFilter(statusFilter === '1to3min' ? 'All' : '1to3min')}
+                        style={{
+                          border: '1px solid #3b82f6',
+                          borderRadius: '8px',
+                          padding: '14px',
+                          textAlign: 'center',
+                          cursor: 'pointer',
+                          background: statusFilter === '1to3min' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <div style={{ fontSize: '22px', fontWeight: '800', color: '#60a5fa', marginBottom: '4px' }}>
+                          {oneToThreeMinCalls}
+                        </div>
+                        <div style={{ fontSize: '11px', fontWeight: 'bold', color: 'white' }}>
+                          1 TO 3 MIN CALL ({getConnectedPct(oneToThreeMinCalls)})
+                        </div>
+                      </div>
+
+                      {/* 3 Min + */}
+                      <div
+                        onClick={() => setStatusFilter(statusFilter === 'over3min' ? 'All' : 'over3min')}
+                        style={{
+                          border: '1px solid #10b981',
+                          borderRadius: '8px',
+                          padding: '14px',
+                          textAlign: 'center',
+                          cursor: 'pointer',
+                          background: statusFilter === 'over3min' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <div style={{ fontSize: '22px', fontWeight: '800', color: '#10b981', marginBottom: '4px' }}>
+                          {overThreeMinCalls}
+                        </div>
+                        <div style={{ fontSize: '11px', fontWeight: 'bold', color: 'white' }}>
+                          3 MIN + CALL ({getConnectedPct(overThreeMinCalls)})
+                        </div>
+                      </div>
                     </div>
                   </div>
-                )}
+                </div>
 
               </div>
 

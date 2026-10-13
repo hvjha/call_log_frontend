@@ -472,10 +472,21 @@
   animation: soundWave 1.2s infinite ease-in-out;
 }
 
-.sound-bar:nth-child(2) { animation-delay: 0.15s; }
-.sound-bar:nth-child(3) { animation-delay: 0.3s; }
-.sound-bar:nth-child(4) { animation-delay: 0.45s; }
-.sound-bar:nth-child(5) { animation-delay: 0.6s; }
+.sound-bar:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.sound-bar:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.sound-bar:nth-child(4) {
+  animation-delay: 0.45s;
+}
+
+.sound-bar:nth-child(5) {
+  animation-delay: 0.6s;
+}
 
 /* Call Disposition / Outcome Notes Form */
 .outcome-box {
@@ -592,7 +603,8 @@
   box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 }
 
-.filter-select, .filter-input {
+.filter-select,
+.filter-input {
   background: rgba(9, 10, 15, 0.7);
   color: var(--text-primary);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -604,11 +616,13 @@
   transition: all 0.2s ease;
 }
 
-.filter-select:hover, .filter-input:hover {
+.filter-select:hover,
+.filter-input:hover {
   border-color: rgba(139, 92, 246, 0.4);
 }
 
-.filter-select:focus, .filter-input:focus {
+.filter-select:focus,
+.filter-input:focus {
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.15);
 }
@@ -638,7 +652,22 @@
 .stats-row {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 16px;
+  gap: 14px;
+}
+
+.duration-subcard {
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.duration-subcard:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.duration-subcard.active {
+  background: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.15);
 }
 
 .stat-card {
@@ -671,43 +700,92 @@
   border-color: rgba(255, 255, 255, 0.1);
 }
 
-.stat-card-total::after { background: var(--info); }
-.stat-card-total:hover { box-shadow: 0 8px 20px rgba(59, 130, 246, 0.15); }
+.stat-card-total::after {
+  background: var(--info);
+}
+
+.stat-card-total:hover {
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.15);
+}
+
 .stat-card-total.active-filter {
   background: rgba(59, 130, 246, 0.08);
   border-color: var(--info) !important;
 }
 
-.stat-card-interested::after { background: var(--success); }
-.stat-card-interested:hover { box-shadow: 0 8px 20px rgba(16, 185, 129, 0.15); }
+.stat-card-interested::after {
+  background: var(--success);
+}
+
+.stat-card-interested:hover {
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.15);
+}
+
 .stat-card-interested.active-filter {
   background: rgba(16, 185, 129, 0.08);
   border-color: var(--success) !important;
 }
 
-.stat-card-followup::after { background: var(--warning); }
-.stat-card-followup:hover { box-shadow: 0 8px 20px rgba(245, 158, 11, 0.15); }
+.stat-card-not-interested::after {
+  background: #64748b;
+}
+
+.stat-card-not-interested:hover {
+  box-shadow: 0 8px 20px rgba(100, 116, 139, 0.15);
+}
+
+.stat-card-not-interested.active-filter {
+  background: rgba(100, 116, 139, 0.08);
+  border-color: #64748b !important;
+}
+
+.stat-card-followup::after {
+  background: var(--warning);
+}
+
+.stat-card-followup:hover {
+  box-shadow: 0 8px 20px rgba(245, 158, 11, 0.15);
+}
+
 .stat-card-followup.active-filter {
   background: rgba(245, 158, 11, 0.08);
   border-color: var(--warning) !important;
 }
 
-.stat-card-missed::after { background: var(--danger); }
-.stat-card-missed:hover { box-shadow: 0 8px 20px rgba(239, 68, 68, 0.15); }
+.stat-card-missed::after {
+  background: var(--danger);
+}
+
+.stat-card-missed:hover {
+  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.15);
+}
+
 .stat-card-missed.active-filter {
   background: rgba(239, 68, 68, 0.08);
   border-color: var(--danger) !important;
 }
 
-.stat-card-prospect::after { background: var(--accent-secondary); }
-.stat-card-prospect:hover { box-shadow: 0 8px 20px rgba(217, 70, 239, 0.15); }
+.stat-card-prospect::after {
+  background: var(--accent-secondary);
+}
+
+.stat-card-prospect:hover {
+  box-shadow: 0 8px 20px rgba(217, 70, 239, 0.15);
+}
+
 .stat-card-prospect.active-filter {
   background: rgba(217, 70, 239, 0.08);
   border-color: var(--accent-secondary) !important;
 }
 
-.stat-card-enquiry::after { background: var(--success); }
-.stat-card-enquiry:hover { box-shadow: 0 8px 20px rgba(16, 185, 129, 0.15); }
+.stat-card-enquiry::after {
+  background: var(--success);
+}
+
+.stat-card-enquiry:hover {
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.15);
+}
+
 .stat-card-enquiry.active-filter {
   background: rgba(16, 185, 129, 0.08);
   border-color: var(--success) !important;
@@ -721,12 +799,33 @@
   margin-bottom: 8px;
 }
 
-.stat-card-total .stat-val { color: #60a5fa; }
-.stat-card-interested .stat-val { color: #34d399; }
-.stat-card-followup .stat-val { color: #fbbf24; }
-.stat-card-missed .stat-val { color: #f87171; }
-.stat-card-prospect .stat-val { color: #f472b6; }
-.stat-card-enquiry .stat-val { color: #059669; }
+.stat-card-total .stat-val {
+  color: #60a5fa;
+}
+
+.stat-card-interested .stat-val {
+  color: #34d399;
+}
+
+.stat-card-not-interested .stat-val {
+  color: #94a3b8;
+}
+
+.stat-card-followup .stat-val {
+  color: #fbbf24;
+}
+
+.stat-card-missed .stat-val {
+  color: #f87171;
+}
+
+.stat-card-prospect .stat-val {
+  color: #f472b6;
+}
+
+.stat-card-enquiry .stat-val {
+  color: #059669;
+}
 
 .stat-label {
   font-size: 11px;
@@ -846,16 +945,19 @@
 
 .logs-table {
   width: 100%;
-  min-width: 900px; /* Forces X Scroll if screen is small */
+  min-width: 900px;
+  /* Forces X Scroll if screen is small */
   border-collapse: collapse;
   text-align: left;
 }
 
-.logs-table th, .logs-table td {
+.logs-table th,
+.logs-table td {
   padding: 14px 20px;
   border-bottom: 1px solid var(--border-color);
   font-size: 14px;
-  white-space: nowrap; /* Prevents text wrapping, forcing horizontal scroll */
+  white-space: nowrap;
+  /* Prevents text wrapping, forcing horizontal scroll */
 }
 
 .logs-table th {
@@ -1019,6 +1121,7 @@
     opacity: 0;
     transform: translateY(4px) scale(0.98);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -1092,5 +1195,3 @@
 .assign-preview-item:hover {
   background: rgba(255, 255, 255, 0.06);
 }
-
-
