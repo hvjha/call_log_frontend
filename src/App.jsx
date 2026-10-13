@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import './App.css';
+import jjLogo from './assets/jj_logo.png';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -1717,7 +1718,7 @@ function App() {
         <div className="auth-card">
           <div className="auth-header" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>
             <img
-              src="/logo.png"
+              src={jjLogo}
               alt="JJ Group Logo"
               style={{
                 width: '84px',
@@ -1771,7 +1772,7 @@ function App() {
       <header className="dashboard-header">
         <div className="header-logo" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <img
-            src="/logo.png"
+            src={jjLogo}
             alt="JJ Group Logo"
             style={{
               width: '36px',
